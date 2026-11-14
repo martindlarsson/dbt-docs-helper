@@ -1,8 +1,8 @@
-# heirloom
+# dbt-docs-helper
 
 > Kolumnbeskrivningar som går i arv – skriv en gång, dokumentera överallt.
 
-`heirloom` är ett (planerat) verktyg som hjälper dig skriva och underhålla dokumentation i dbt-projekt.
+`dbt-docs-helper` är ett (planerat) verktyg som hjälper dig skriva och underhålla dokumentation i dbt-projekt.
 
 ## Mål
 
