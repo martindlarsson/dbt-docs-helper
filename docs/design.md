@@ -16,6 +16,8 @@
 | Omdöpta kolumner | Arv föreslås bara, sker aldrig automatiskt |
 | Täckning | Inkluderar `sources` och seeds |
 | Distribution | VS Code Marketplace och Open VSX |
+| Kandidat för docs-block | Kolumnen förekommer i ≥ 3 modeller (konfigurerbart). Starkare förslag om texten är likadan |
+| Inaktuellt manifest | Varning med knapp som kör `dbt parse` (kommando konfigurerbart, t.ex. `dbtf parse` för Fusion) |
 
 ## Viktigt om arv i dbt
 
@@ -101,12 +103,11 @@ packages/
 | Verktyg | Lucka som heirloom fyller |
 |---|---|
 | Officiella dbt VS Code-tillägget (Fusion) | Fokus på kompilering/lineage, inte dokumentationsarbete. heirloom ska fungera bredvid det |
+| dbt Power User (AltimateAI) | Brett tillägg med AI-genererade docs och kolumnlineage. heirloom fokuserar på arv, docs-block och täckning |
 | dbt-osmosis | Python/dbt-core, skriver om filer hårt, visar inte varför något ärvdes |
 | dbt-coverage, dbt_project_evaluator | Mäter, men hjälper inte att åtgärda |
 
 ## Öppna frågor
 
-- Tröskel för "kandidat för docs-block": antal modeller (standard 3?), eller också krav på att
-  texten är likadan?
-- Ska heirloom själv köra `dbt parse` när manifestet är inaktuellt, eller bara varna?
 - Vad händer när det finns flera manifest (t.ex. `target/` och dbt Cloud CLI:s egen katalog)?
+- Slutligt namn på projektet.
