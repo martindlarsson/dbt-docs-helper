@@ -17,3 +17,7 @@
 ## Status
 
 Idéstadiet. Se [docs/design.md](docs/design.md) för brainstorm och öppna frågor.
+
+## Licens
+
+MIT, se [LICENSE](LICENSE).

@@ -10,7 +10,12 @@
 | Storlek | Ska fungera bra med ~500 modeller, men också för små projekt |
 | Centrala texter | Förslag på kolumner som bör ligga centralt, sparade som `{% docs %}`-block i en fil som användaren väljer |
 | AI | Ja, som förslag (opt-in) |
-| Licens | Öppen källkod |
+| Licens | MIT (gratis, öppen källkod) |
+| Användare | Utvecklare lokalt i VS Code. Analytiker i dbt Cloud behöver inte tillägget; de får nytta av resultatet (YAML + docs-block) och av CLI-kontroller i CI |
+| Indata | `manifest.json` krävs (`dbt parse` / Fusion) |
+| Omdöpta kolumner | Arv föreslås bara, sker aldrig automatiskt |
+| Täckning | Inkluderar `sources` och seeds |
+| Distribution | VS Code Marketplace och Open VSX |
 
 ## Viktigt om arv i dbt
 
@@ -50,9 +55,22 @@ heirloom ska alltså göra arvet synligt **i editorn**, och kunna göra det best
 
 - Inställning `heirloom.docsBlocks.defaultFile`, t.ex. `models/_docs/columns.md`.
 - Vid extrahering: snabbval med befintliga `.md`-filer i `docs-paths`/`model-paths`, eller "Ny fil…".
-- Namnkonvention, konfigurerbar: `col__{column_name}` som standard (kan göras per lager, t.ex.
-  `stg__customer_id`?).
-- Ny referens skrivs som `description: "{{ doc('col__customer_id') }}"`.
+
+### Namnkonvention
+`col_{modell}__{kolumn}`, t.ex. `col_stg_customers__customer_id`.
+
+- `col_` visar att det är en kolumnbeskrivning (skiljer från t.ex. modellbeskrivningar).
+- Modellnamnet är den modell där kolumnen **har sitt ursprung**, inte varje modell som
+  använder den. Nedströms modeller som ärver länkar till samma block.
+- Två kolumner med samma namn men olika betydelse (t.ex. `status` i `orders` och `payments`)
+  får därmed olika block.
+- För källor: `col_{source}_{tabell}__{kolumn}`, t.ex. `col_crm_customers__customer_id`.
+- `__` (dubbelt understreck) skiljer modell från kolumn, eftersom båda kan innehålla `_`.
+- Mönstret ska vara konfigurerbart: `heirloom.docsBlocks.namePattern = "col_{model}__{column}"`.
+- Om modellen döps om ligger blocknamnet kvar. Lägg till en varning: "Blockets prefix matchar
+  ingen befintlig modell".
+
+Ny referens skrivs som `description: "{{ doc('col_stg_customers__customer_id') }}"`.
 
 ## Teknisk arkitektur
 
@@ -88,12 +106,7 @@ packages/
 
 ## Öppna frågor
 
-- Utvecklar teamet lokalt i VS Code (dbt Cloud CLI / Fusion) eller i dbt Clouds webb-IDE?
-  Ett VS Code-tillägg fungerar bara i det första fallet.
-- Vem bygger `manifest.json` lokalt? Krävs `dbt parse` vid varje ändring, eller ska heirloom
-  kunna läsa YAML/SQL utan manifest för det enkla fallet?
-- Ska omdöpta kolumner (`id as customer_id`) ärva automatiskt, eller bara föreslås?
-- Tröskel för "kandidat för docs-block": antal modeller, eller också krav på att texten är likadan?
-- Ska källor (`sources`) och seeds räknas i täckningen?
-- Distribution: VS Code Marketplace + Open VSX (för Cursor m.fl.)?
-- Licens: MIT eller Apache-2.0?
+- Tröskel för "kandidat för docs-block": antal modeller (standard 3?), eller också krav på att
+  texten är likadan?
+- Ska heirloom själv köra `dbt parse` när manifestet är inaktuellt, eller bara varna?
+- Vad händer när det finns flera manifest (t.ex. `target/` och dbt Cloud CLI:s egen katalog)?
