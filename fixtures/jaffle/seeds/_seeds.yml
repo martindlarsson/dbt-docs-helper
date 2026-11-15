@@ -1,0 +1,8 @@
+version: 2
+seeds:
+  - name: raw_customers
+    description: Raw customer export
+    columns:
+      - name: id
+        description: Customer id in the source system
+      - name: created_at

@@ -1,0 +1,14 @@
+{
+  "name": "@dbt-docs-helper/core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
+  }
+}

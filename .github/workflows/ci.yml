@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: CLI on the fixture project
+        working-directory: fixtures/jaffle
+        run: node ../../packages/cli/dist/cli.js coverage --by layer --format markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Package the extension
+        run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs-helper-vsix
+          path: packages/vscode/dbt-docs-helper.vsix
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Integration tests in VS Code
+        run: xvfb-run -a npm run test:integration -w packages/vscode
+
+  dbt-roundtrip:
+    # Writes inherited descriptions with the CLI and checks that dbt still parses the project.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci && npm run build -w packages/cli
+      - run: pip install dbt-core dbt-duckdb
+      - name: inherit --write, add-columns --write, dbt parse
+        working-directory: fixtures/jaffle
+        run: |
+          node ../../packages/cli/dist/cli.js inherit --write --include-renamed
+          node ../../packages/cli/dist/cli.js add-columns --write
+          git diff --stat
+          dbt parse --profiles-dir .
+          node ../../packages/cli/dist/cli.js coverage

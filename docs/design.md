@@ -1,113 +1,159 @@
-# Designanteckningar
+# Design notes
 
-## Beslut hittills
+## Decisions so far
 
-| Område | Beslut |
+| Area | Decision |
 |---|---|
-| Arbetsflöde | Verktyget ändrar YAML-filer (kommentarer och formatering ska bevaras) |
-| Gränssnitt | VS Code-tillägg i första hand |
-| Miljö | dbt v1 "latest" (dbt Cloud). Stöd för Fusion är ett krav |
-| Storlek | Ska fungera bra med ~500 modeller, men också för små projekt |
-| Centrala texter | Förslag på kolumner som bör ligga centralt, sparade som `{% docs %}`-block i en fil som användaren väljer |
-| AI | Ja, som förslag (opt-in) |
-| Licens | MIT (gratis, öppen källkod) |
-| Användare | Utvecklare lokalt i VS Code. Analytiker i dbt Cloud behöver inte tillägget; de får nytta av resultatet (YAML + docs-block) och av CLI-kontroller i CI |
-| Indata | `manifest.json` krävs (`dbt parse` / Fusion) |
-| Omdöpta kolumner | Arv föreslås bara, sker aldrig automatiskt |
-| Täckning | Inkluderar `sources` och seeds |
-| Distribution | VS Code Marketplace och Open VSX |
-| Kandidat för docs-block | Kolumnen förekommer i ≥ 3 modeller (konfigurerbart). Starkare förslag om texten är likadan |
-| Inaktuellt manifest | Varning med knapp som kör `dbt parse` (kommando konfigurerbart, t.ex. `dbtf parse` för Fusion) |
+| Workflow | The tool edits YAML files (comments and formatting must be preserved) |
+| Interface | VS Code extension first |
+| Environment | dbt v1 "latest" (dbt Cloud). Support for Fusion is a requirement |
+| Size | Must work well with ~500 models, but also for small projects |
+| Shared texts | Suggest columns that should be documented centrally, stored as `{% docs %}` blocks in a file the user chooses |
+| AI | Yes, as suggestions (opt-in) |
+| License | MIT (free, open source) |
+| Users | Developers working locally in VS Code. Analysts in dbt Cloud do not need the extension; they benefit from the result (YAML + doc blocks) and from CLI checks in CI |
+| Input | `manifest.json` is required (`dbt parse` / Fusion) |
+| Renamed columns | Inheritance is only suggested, never applied automatically |
+| Coverage | Includes `sources` and seeds |
+| Distribution | VS Code Marketplace and Open VSX |
+| Doc block candidate | The column occurs in ≥ 3 models (configurable). Stronger suggestion if the text is identical |
+| Stale manifest | Must not disturb. Documentation edits never count (YAML/Markdown are read directly); only SQL/Python, seeds, `dbt_project.yml` and new sources do. Default: status bar only when another tool (the dbt extension with Fusion, dbt Power User, a terminal) keeps the manifest updated, otherwise at most one notification per session after a 30 s grace period. Optional `autoParse` runs the parse command (configurable, e.g. `dbtf parse`) in the background |
 
-## Viktigt om arv i dbt
+## Important: inheritance in dbt
 
-dbt Core för **inte** automatiskt vidare kolumnbeskrivningar till modeller nedströms i YAML,
-`manifest.json`, `dbt docs` eller `persist_docs`. En kolumn utan beskrivning är tom, även om den
-heter likadant uppströms. dbt Catalog/Explorer i dbt Cloud kan *visa* ärvda beskrivningar för
-kolumner som bara skickas vidare eller döps om (detta behöver verifieras för den nivå av dbt Cloud
-som används). Texten skrivs dock aldrig in i projektet.
+dbt Core does **not** automatically pass column descriptions on to downstream models in YAML,
+`manifest.json`, `dbt docs` or `persist_docs`. A column without a description is empty, even if a
+column with the same name upstream is documented. dbt Catalog/Explorer in dbt Cloud can *display*
+inherited descriptions for columns that are only passed through or renamed (this needs to be
+verified for the dbt Cloud tier in use). The text is, however, never written into the project.
 
-dbt-docs-helper ska alltså göra arvet synligt **i editorn**, och kunna göra det beständigt i YAML.
+dbt-docs-helper should therefore make inheritance visible **in the editor**, and be able to make it
+persistent in YAML.
 
-### Strategi för beständigt arv
-1. Uppströms kolumn har `{{ doc('x') }}` → skriv samma referens nedströms. Ingen dubblerad text.
-2. Uppströms kolumn har vanlig text → föreslå "Flytta till docs-block och länka båda".
-   Arv blir då i praktiken återanvändning av docs-block.
-3. Användaren kan välja att inte skriva något och bara låta dbt-docs-helper visa arvet virtuellt
-   (räknas då som "ärvbar" i täckningen, inte "saknas").
+### Strategy for persistent inheritance
+1. The upstream column has `{{ doc('x') }}` → write the same reference downstream. No duplicated text.
+2. The upstream column has plain text → suggest "Move to doc block and link both".
+   Inheritance then effectively becomes reuse of doc blocks.
+3. The user can choose not to write anything and let dbt-docs-helper show the inheritance virtually
+   (it then counts as "inheritable" in coverage, not "missing").
 
-## Funktioner i VS Code
+## Features in VS Code
 
-- **Inlay hint / spöktext** på kolumner utan beskrivning i YAML: `↳ från stg_customers: "Unikt id för…"`.
-- **Hover**: hela arvskedjan (källa → staging → mart) och typ av arv (passthrough, omdöpt, transformerad).
-- **Snabbåtgärder (code actions)**:
-  - Ärv från uppströms
-  - Flytta till docs-block (välj fil, se nedan)
-  - Länka till befintligt docs-block
-  - Föreslå beskrivning med AI
-  - Lägg till saknade kolumner i YAML (skelett)
-- **Diagnostik (Problems-panelen)**, nivå konfigurerbar:
-  - Kolumn saknar beskrivning och kan inte ärvas
-  - Samma kolumnnamn har olika beskrivningar i olika modeller
-  - Kolumn förekommer i ≥ N modeller → kandidat för docs-block
-- **Sidopanel (tree view)**: täckning per mapp/lager/tagg, och en arbetslista sorterad på
-  "måste skrivas för hand" först.
+- **Inlay hint / ghost text** on columns without a description in YAML: `↳ from stg_customers: "Unique id of…"`.
+- **Hover**: the full inheritance chain (source → staging → mart) and the kind of inheritance (passthrough, renamed, transformed).
+- **Quick fixes (code actions)**:
+  - Inherit from upstream
+  - Move to doc block (choose file, see below)
+  - Link to an existing doc block
+  - Suggest a description with AI
+  - Add missing columns to YAML (skeleton)
+- **Diagnostics (Problems panel)**, configurable severity:
+  - Column has no description and cannot inherit one
+  - The same column name has different descriptions in different models
+  - Column occurs in ≥ N models → candidate for a doc block
+- **Side panel (tree view)**: coverage per folder/layer/tag, and a work list sorted with
+  "must be written by hand" first.
 
-## Docs-block-fil
+## Doc block file
 
-- Inställning `dbt-docs-helper.docsBlocks.defaultFile`, t.ex. `models/_docs/columns.md`.
-- Vid extrahering: snabbval med befintliga `.md`-filer i `docs-paths`/`model-paths`, eller "Ny fil…".
+- Setting `dbt-docs-helper.docsBlocks.defaultFile`, e.g. `models/_docs/columns.md`.
+- When extracting: a quick pick with existing `.md` files in `docs-paths`/`model-paths`, or "New file…".
 
-### Namnkonvention
-`col_{modell}__{kolumn}`, t.ex. `col_stg_customers__customer_id`.
+### Naming convention
+There are two patterns, depending on how the block is created:
 
-- `col_` visar att det är en kolumnbeskrivning (skiljer från t.ex. modellbeskrivningar).
-- Modellnamnet är den modell där kolumnen **har sitt ursprung**, inte varje modell som
-  använder den. Nedströms modeller som ärver länkar till samma block.
-- Två kolumner med samma namn men olika betydelse (t.ex. `status` i `orders` och `payments`)
-  får därmed olika block.
-- För källor: `col_{source}_{tabell}__{kolumn}`, t.ex. `col_crm_customers__customer_id`.
-- `__` (dubbelt understreck) skiljer modell från kolumn, eftersom båda kan innehålla `_`.
-- Mönstret ska vara konfigurerbart: `dbt-docs-helper.docsBlocks.namePattern = "col_{model}__{column}"`.
-- Om modellen döps om ligger blocknamnet kvar. Lägg till en varning: "Blockets prefix matchar
-  ingen befintlig modell".
+- **Shared blocks** (from *Doc block candidates*, a column used in many models):
+  `col_{column}`, e.g. `col_customer_id`. The text lives in a global file and is meant for every
+  model that uses the column, so the name should not point at one model.
+  Setting: `dbt-docs-helper.docsBlocks.sharedNamePattern`. If a block with that name already exists
+  with a different text, the user is asked for another name.
+- **Blocks moved from one column** ("Move to doc block"): `col_{model}__{column}`, e.g.
+  `col_stg_customers__customer_id`, as described below.
 
-Ny referens skrivs som `description: "{{ doc('col_stg_customers__customer_id') }}"`.
+Rules for `col_{model}__{column}`:
 
-## Teknisk arkitektur
+- `col_` shows that it is a column description (as opposed to, for example, model descriptions).
+- The model name is the model where the column **originates**, not every model that uses it.
+  Downstream models that inherit link to the same block.
+- Two columns with the same name but different meanings (e.g. `status` in `orders` and `payments`)
+  therefore get different blocks.
+- For sources: `col_{source}_{table}__{column}`, e.g. `col_crm_customers__customer_id`.
+- `__` (double underscore) separates model from column, since both can contain `_`.
+- The pattern is configurable: `dbt-docs-helper.docsBlocks.namePattern = "col_{model}__{column}"`.
+- If the model is renamed, the block name stays. Add a warning: "The block's prefix matches no
+  existing model".
+
+A new reference is written as `description: "{{ doc('col_stg_customers__customer_id') }}"`.
+
+## Technical architecture
 
 ```
 packages/
-  core/        # TypeScript: läsa manifest, YAML, lineage, regler. Inga VS Code-beroenden
-  vscode/      # Tillägget: hints, hover, code actions, tree view
-  cli/         # Samma core i terminal/CI: `dbt-docs-helper coverage --fail-under 80`
+  core/        # TypeScript: read manifest, YAML, lineage, rules. No VS Code dependencies
+  vscode/      # The extension: hints, hover, code actions, tree views
+  cli/         # The same core in the terminal/CI: `dbt-docs-helper coverage --fail-under 80`
 ```
 
-- **TypeScript hela vägen**: ingen Python, dbt-core eller dbt-osmosis behövs. Det gör att
-  verktyget fungerar likadant med Fusion som med dbt Core.
-- **Indata**: `target/manifest.json` (skrivs av både dbt Core och Fusion) samt YAML-filerna
-  direkt från disk. Valfritt `catalog.json` för att hitta kolumner som saknas i YAML.
-- **YAML-redigering**: biblioteket `yaml` (eemeli) via Document API för att bevara kommentarer,
-  ordning och citattecken. Ändringar görs som `WorkspaceEdit` så att det går att ångra.
-- **Fusion-kompatibilitet**: skriva YAML enligt de nyare reglerna (t.ex. `config:`-block,
-  `arguments:` för tester) och testa mot dbt-fusion-manifest i CI.
-- **Lineage**, i steg:
-  1. Namnmatchning via `depends_on` i manifest (enkelt, täcker de flesta passthrough).
-  2. SQL-tolkning av kompilerad SQL för att hitta omdöpningar och transformationer.
-  3. Undersöka om Fusions egna kolumnlineage går att läsa (LSP eller artefakter).
-- **AI**: VS Code Language Model API (`vscode.lm`), som använder den modell användaren redan har
-  i editorn, alternativt egen API-nyckel. Underlag: SQL, uppströms beskrivningar, kolumnnamn.
+- **TypeScript all the way**: no Python, dbt-core or dbt-osmosis needed. This means the tool
+  works the same with Fusion as with dbt Core.
+- **Input**: `target/manifest.json` (written by both dbt Core and Fusion) plus the YAML files
+  read directly from disk. Optionally `catalog.json` to find columns that are missing in YAML.
+- **YAML editing**: the `yaml` library (eemeli) via the Document API to preserve comments,
+  ordering and quoting. Changes are applied as a `WorkspaceEdit` so they can be undone.
+- **Fusion compatibility**: write YAML according to the newer rules (e.g. `config:` blocks,
+  `arguments:` for tests) and test against dbt Fusion manifests in CI.
+- **Lineage**, in steps:
+  1. Name matching via `depends_on` in the manifest (simple, covers most passthrough).
+  2. Reading compiled SQL to find renames and transformations.
+  3. Investigate whether Fusion's own column lineage can be read (LSP or artifacts).
+- **AI**: the VS Code Language Model API (`vscode.lm`), which uses the model the user already has
+  in the editor, or alternatively an own API key. Context: SQL, upstream descriptions, column names.
 
-## Befintliga verktyg
+## Implemented in 0.1.0
 
-| Verktyg | Lucka som dbt-docs-helper fyller |
+- **Lineage steps 1 and 2**: name matching via `depends_on`, plus a simple SQL reader
+  (`packages/core/src/sql.ts`) that follows `alias.column`, `x as y`, import CTEs
+  (`orders as (select * from {{ ref('stg_orders') }})`) and `select * from final`. Expressions that
+  reference a single column (`sum(p.amount) as amount`) are counted as *transformed*.
+  Inheritance found via SQL is ranked above plain name matching.
+- **Safe inheritance** (written in bulk by "Inherit all" and `inherit --write`): a single upstream
+  text, passthrough, traced in SQL. Renamed/transformed columns and name matches are only suggested.
+- **Origin for block names**: follows the column upstream as long as it keeps the same name and
+  is passed through unchanged. For candidates, the origin shared by most usages is chosen.
+- **Unsaved changes** in YAML/Markdown are used directly (overlay); the manifest is used for
+  lineage, SQL and resources.
+- **YAML changes** are made as minimal text edits (insert/replace), not by re-serialising the
+  document. Comments, quoting, CRLF and ordering are preserved.
+- **Performance**: 500 models × 25 columns are analysed in under 0.1 s.
+- **Doc block candidates** only count columns that are in YAML (catalog-only columns cannot be
+  linked). A candidate is done when at least one usage links to a doc block and every other usage
+  has its own, different text (a different meaning, kept on purpose).
+- **Columns only in `catalog.json`** are shown in their own "Not in YAML" section of the work
+  list, per model, with a button to add them to YAML.
+
+### Planned work
+
+Planned work is tracked as [GitHub issues](https://github.com/martindlarsson/dbt-docs-helper/issues):
+
+- [#1 dbt_project.yml overview and checks for common mistakes](https://github.com/martindlarsson/dbt-docs-helper/issues/1)
+- [#2 Model summary panel for the open model](https://github.com/martindlarsson/dbt-docs-helper/issues/2)
+- [#3 Set column data types from the data platform or the manifest](https://github.com/martindlarsson/dbt-docs-helper/issues/3)
+- [#4 Find unused doc blocks](https://github.com/martindlarsson/dbt-docs-helper/issues/4)
+- [#5 Use dbt Fusion's own column lineage](https://github.com/martindlarsson/dbt-docs-helper/issues/5)
+- [#6 Support versioned models](https://github.com/martindlarsson/dbt-docs-helper/issues/6)
+- [#7 Quick fixes for model descriptions](https://github.com/martindlarsson/dbt-docs-helper/issues/7)
+- [#8 Code lens in .md files: which columns use a doc block](https://github.com/martindlarsson/dbt-docs-helper/issues/8)
+- [#9 Flag YAML model names that do not match any SQL file, and suggest a fix](https://github.com/martindlarsson/dbt-docs-helper/issues/9)
+
+## Existing tools
+
+| Tool | Gap that dbt-docs-helper fills |
 |---|---|
-| Officiella dbt VS Code-tillägget (Fusion) | Fokus på kompilering/lineage, inte dokumentationsarbete. dbt-docs-helper ska fungera bredvid det |
-| dbt Power User (AltimateAI) | Brett tillägg med AI-genererade docs och kolumnlineage. dbt-docs-helper fokuserar på arv, docs-block och täckning |
-| dbt-osmosis | Python/dbt-core, skriver om filer hårt, visar inte varför något ärvdes |
-| dbt-coverage, dbt_project_evaluator | Mäter, men hjälper inte att åtgärda |
+| The official dbt VS Code extension (Fusion) | Focus on compilation/lineage, not documentation work. dbt-docs-helper should work alongside it |
+| dbt Power User (AltimateAI) | Broad extension with AI-generated docs and column lineage. dbt-docs-helper focuses on inheritance, doc blocks and coverage |
+| dbt-osmosis | Python/dbt-core, rewrites files heavily, does not show why something was inherited |
+| dbt-coverage, dbt_project_evaluator | Measure, but do not help fix |
 
-## Öppna frågor
+## Open questions
 
-- Vad händer när det finns flera manifest (t.ex. `target/` och dbt Cloud CLI:s egen katalog)?
-- Slutligt namn på projektet.
+- What happens when there are several manifests (e.g. `target/` and the dbt Cloud CLI's own directory)?

@@ -4,3 +4,15 @@ __pycache__/
 dist/
 *.egg-info/
 target/
+node_modules/
+out/
+*.vsix
+*.tsbuildinfo
+coverage/
+.vscode-test/
+!fixtures/**/target/
+fixtures/**/target/*
+!fixtures/**/target/manifest.json
+!fixtures/**/target/catalog.json
+fixtures/**/logs/
+.user.yml

@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  # Customers from the CRM
+  - name: stg_customers
+    description: One row per customer
+    columns:
+      - name: customer_id
+        description: Unique id of a customer
+        data_tests:
+          - unique
+          - not_null
+      - name: first_name
+      - name: last_name
+        description: 'Customer last name'
+      - name: created_at
+
+  - name: stg_orders
+    description: One row per order
+    columns:
+      - name: order_id
+        description: "{{ doc('col_stg_orders__order_id') }}"
+      - name: customer_id
+        description: The customer who placed the order
+      - name: order_date
+        description: Date the order was placed
+      - name: status
+        description: Order status (placed, shipped, completed, returned)
+      - name: created_at
+        description: When the row was created
+
+  - name: stg_payments
+    columns:
+      - name: payment_id
+      - name: order_id
+        description: "{{ doc('col_stg_orders__order_id') }}"
+      - name: payment_method
+      - name: amount
+        description: Payment amount in SEK
+      - name: status
+        description: Payment status (success, failed)

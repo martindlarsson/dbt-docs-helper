@@ -1,0 +1,22 @@
+{
+  "name": "dbt-docs-helper-monorepo",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/core",
+    "packages/cli",
+    "packages/vscode"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/core && npm run build -w packages/cli && npm run build -w packages/vscode",
+    "typecheck": "tsc -p packages/core && tsc -p packages/cli --noEmit && tsc -p packages/vscode --noEmit",
+    "test": "vitest run",
+    "package": "npm run package -w packages/vscode"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}

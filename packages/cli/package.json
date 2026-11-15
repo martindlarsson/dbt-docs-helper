@@ -1,0 +1,27 @@
+{
+  "name": "dbt-docs-helper-cli",
+  "version": "0.1.0",
+  "description": "Coverage, inheritance and docs-block checks for dbt documentation, from the terminal or CI.",
+  "license": "MIT",
+  "bin": {
+    "dbt-docs-helper": "dist/cli.js"
+  },
+  "files": [
+    "dist/cli.js"
+  ],
+  "engines": {
+    "node": ">=18.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/martindlarsson/dbt-docs-helper.git",
+    "directory": "packages/cli"
+  },
+  "keywords": ["dbt", "documentation", "coverage", "fusion"],
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --target=node18 --outfile=dist/cli.js"
+  },
+  "devDependencies": {
+    "@dbt-docs-helper/core": "0.1.0"
+  }
+}
