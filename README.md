@@ -1,50 +1,50 @@
 # dbt-docs-helper
 
-> Kolumnbeskrivningar som går i arv – skriv en gång, dokumentera överallt.
+> Column descriptions that are inherited – write once, document everywhere.
 
-`dbt-docs-helper` hjälper dig skriva och underhålla dokumentation i dbt-projekt. Det består av ett
-VS Code-tillägg och ett CLI för CI, som delar samma kärna (TypeScript, ingen Python behövs).
-Fungerar med dbt Core och dbt Fusion: verktyget läser bara `target/manifest.json` och YAML-filerna.
+`dbt-docs-helper` helps you write and maintain documentation in dbt projects. It consists of a
+VS Code extension and a CLI for CI, which share the same core (TypeScript, no Python needed).
+Works with dbt Core and dbt Fusion: the tool only reads `target/manifest.json` and the YAML files.
 
-## Mål
+## Goals
 
-1. **Central hantering av återkommande kolumner**: hitta kolumner som förekommer i många modeller
-   (t.ex. `customer_id`, `created_at`) och flytta deras beskrivningar till ett centralt ställe
-   (`{% docs %}`-block), som sedan refereras med `{{ doc('...') }}`.
-2. **Täckningsgrad**: rapportera hur många modeller och kolumner som saknar beskrivning,
-   per mapp, lager (staging/intermediate/marts), ägare eller tagg.
-3. **Arv via lineage**: använda `manifest.json` och kolumnnivå-lineage för att visa vilka
-   beskrivningar som kan ärvas från uppströms modeller, så att de inte behöver skrivas igen.
+1. **Central management of recurring columns**: find columns that occur in many models
+   (e.g. `customer_id`, `created_at`) and move their descriptions to a central place
+   (`{% docs %}` blocks), which are then referenced with `{{ doc('...') }}`.
+2. **Coverage**: report how many models and columns lack a description,
+   per folder, layer (staging/intermediate/marts), owner or tag.
+3. **Inheritance via lineage**: use `manifest.json` and column-level lineage to show which
+   descriptions can be inherited from upstream models, so they do not have to be written again.
 
 ## Status
 
-Version 0.1.0 – första fungerande version av VS Code-tillägget och CLI:t. Inte publicerat ännu.
-Se [docs/design.md](docs/design.md) för beslut och öppna frågor.
+Version 0.1.0 – first working version of the VS Code extension and the CLI. Not published yet.
+See [docs/design.md](docs/design.md) for decisions, open questions and planned work.
 
-## Struktur
+## Structure
 
 ```
 packages/
-  core/     Manifest, YAML-index med positioner, SQL-läsning för lineage, arv, täckning, YAML-ändringar
-  cli/      dbt-docs-helper i terminal/CI
-  vscode/   Tillägget: inlay hints, hover, snabbåtgärder, Problems, vyer för täckning/arbetslista
+  core/     Manifest, YAML index with positions, SQL reading for lineage, inheritance, coverage, YAML edits
+  cli/      dbt-docs-helper in the terminal/CI
+  vscode/   The extension: inlay hints, hover, quick fixes, Problems, views for coverage/work list
 fixtures/
-  jaffle/   Litet dbt-projekt med riktig manifest.json och catalog.json (dbt 1.12) för tester
+  jaffle/   Small dbt project with a real manifest.json and catalog.json (dbt 1.12) for tests
 ```
 
-## VS Code-tillägget
+## The VS Code extension
 
-Se [packages/vscode/README.md](packages/vscode/README.md) för funktionerna. Kortfattat:
+See [packages/vscode/README.md](packages/vscode/README.md) for the features. In short:
 
-- **Inlay hint** på kolumner utan beskrivning: `↳ stg_customers: "Unikt id för…"`. Klick = skriv in.
-- **Hover** med arvskedjan (`crm.customers → stg_customers → customers`) och typ av arv.
-- **Snabbåtgärder**: ärv, flytta till docs-block och länka båda, länka till befintligt block,
-  lägg till saknade kolumner (från `catalog.json`), ärv allt säkert i filen, AI-förslag (opt-in).
-- **Problems-panelen** med konfigurerbar nivå per regel.
-- **Sidopanel**: täckning per lager/mapp/tagg/ägare/typ, arbetslista, kandidater till docs-block.
-- **Varning för inaktuellt manifest** med knapp som kör `dbt parse` (konfigurerbart, t.ex. `dbtf parse`).
+- **Inlay hint** on columns without a description: `↳ stg_customers: "Unique id of…"`. Click = write it in.
+- **Hover** with the inheritance chain (`crm.customers → stg_customers → customers`) and the kind of inheritance.
+- **Quick fixes**: inherit, move to doc block and link both, link to an existing block,
+  add missing columns (from `catalog.json`), inherit everything safe in the file, AI suggestion (opt-in).
+- **Problems panel** with configurable severity per rule.
+- **Side panel**: coverage per layer/folder/tag/owner/kind, work list, doc block candidates.
+- **Stale manifest warning** with a button that runs `dbt parse` (configurable, e.g. `dbtf parse`).
 
-### Prova lokalt
+### Try it locally
 
 ```bash
 npm install
@@ -54,8 +54,8 @@ npm install
 npm run package
 ```
 
-Installera sedan `packages/vscode/dbt-docs-helper.vsix` via *Extensions → … → Install from VSIX*.
-Eller öppna repot i VS Code och tryck F5 ("Run extension on the fixture project").
+Then install `packages/vscode/dbt-docs-helper.vsix` via *Extensions → … → Install from VSIX*.
+Or open the repository in VS Code and press F5 ("Run extension on the fixture project").
 
 ## CLI
 
@@ -63,19 +63,19 @@ Eller öppna repot i VS Code och tryck F5 ("Run extension on the fixture project
 node packages/cli/dist/cli.js coverage --project-dir fixtures/jaffle --by layer
 ```
 
-| Kommando | Vad det gör |
+| Command | What it does |
 |---|---|
-| `coverage` | Täckning per `--by folder\|layer\|tag\|kind\|owner\|resource`, `--fail-under 80` |
-| `check` | För CI: täckning + inaktuellt manifest (`--fail-on-stale`) + block som pekar på borttagna modeller (`--fail-on-orphans`) |
-| `missing` | Arbetslista: det som måste skrivas för hand först, sedan det som kan ärvas |
-| `candidates` | Kolumner i ≥ 3 modeller (`--min-models`) som bör bli docs-block, med föreslaget namn |
-| `conflicts` | Samma kolumnnamn, olika beskrivningar |
-| `inherit` | Skriver ärvda beskrivningar till YAML (torrkörning om inte `--write`). Bara säker passthrough om inte `--include-renamed` / `--include-name-matches` |
-| `add-columns` | Lägger till kolumner som finns i `catalog.json` men saknas i YAML |
+| `coverage` | Coverage per `--by folder\|layer\|tag\|kind\|owner\|resource`, `--fail-under 80` |
+| `check` | For CI: coverage + stale manifest (`--fail-on-stale`) + blocks that refer to removed models (`--fail-on-orphans`) |
+| `missing` | Work list: what must be written by hand first, then what can be inherited |
+| `candidates` | Columns in ≥ 3 models (`--min-models`) that should become doc blocks, with a suggested name |
+| `conflicts` | Same column name, different descriptions |
+| `inherit` | Writes inherited descriptions to YAML (dry run unless `--write`). Only safe passthrough unless `--include-renamed` / `--include-name-matches` |
+| `add-columns` | Adds columns that exist in `catalog.json` but are missing in YAML |
 
-Alla kommandon har `--format text|json|markdown` (markdown passar `$GITHUB_STEP_SUMMARY`).
+All commands accept `--format text|json|markdown` (markdown suits `$GITHUB_STEP_SUMMARY`).
 
-## Utveckling
+## Development
 
 ```bash
 npm test
@@ -85,17 +85,17 @@ npm test
 npm run typecheck
 ```
 
-- Enhetstester (vitest) för core, CLI och tillägget (mot en mock av `vscode`-API:t).
-- Integrationstester i riktig VS Code: `xvfb-run -a npm run test:integration -w packages/vscode` (körs i CI).
-- CI kör också en rundtur: CLI:t skriver ärvda beskrivningar, och sedan måste `dbt parse` lyckas.
-- Fixture-manifestet återskapas med `dbt parse` i `fixtures/jaffle` (dbt-duckdb, `profiles.yml` finns där).
+- Unit tests (vitest) for the core, the CLI and the extension (against a mock of the `vscode` API).
+- Integration tests in real VS Code: `xvfb-run -a npm run test:integration -w packages/vscode` (run in CI).
+- CI also runs a round trip: the CLI writes inherited descriptions, and then `dbt parse` must succeed.
+- The fixture manifest is regenerated with `dbt parse` in `fixtures/jaffle` (dbt-duckdb, `profiles.yml` is there).
 
-## Publicering
+## Publishing
 
-Pusha en tagg `v0.1.0` → `.github/workflows/release.yml` publicerar till VS Code Marketplace och
-Open VSX om hemligheterna `VSCE_PAT` och `OVSX_PAT` finns. Publisher-id i
-`packages/vscode/package.json` är `martindlarsson` och måste finnas i Marketplace.
+Push a tag `v0.1.0` → `.github/workflows/release.yml` publishes to the VS Code Marketplace and
+Open VSX if the secrets `VSCE_PAT` and `OVSX_PAT` exist. The publisher id in
+`packages/vscode/package.json` is `martindlarsson` and must exist in the Marketplace.
 
-## Licens
+## License
 
-MIT, se [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
