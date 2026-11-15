@@ -1,0 +1,435 @@
+{
+  "name": "dbt-docs-helper",
+  "displayName": "dbt Docs Helper",
+  "description": "Write column descriptions once, document everywhere: inherit descriptions from upstream models, share them as doc blocks and track documentation coverage in dbt projects (dbt Core and Fusion).",
+  "version": "0.1.0",
+  "publisher": "martindlarsson",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/martindlarsson/dbt-docs-helper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/martindlarsson/dbt-docs-helper/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "dbt",
+    "documentation",
+    "yaml",
+    "lineage",
+    "fusion",
+    "doc blocks",
+    "coverage"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/dbt_project.yml"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Running dbt parse is disabled in untrusted workspaces."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "dbt-docs-helper.refresh",
+        "title": "Reload projects",
+        "category": "dbt Docs Helper",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "dbt-docs-helper.runParse",
+        "title": "Run dbt parse",
+        "category": "dbt Docs Helper",
+        "icon": "$(run)"
+      },
+      {
+        "command": "dbt-docs-helper.inheritAll",
+        "title": "Inherit all safe descriptions in this file",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.coverage.groupBy",
+        "title": "Group coverage by…",
+        "category": "dbt Docs Helper",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "dbt-docs-helper.candidates.createBlock",
+        "title": "Create shared doc block…",
+        "category": "dbt Docs Helper",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "dbt-docs-helper.showOutput",
+        "title": "Show log",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.inherit",
+        "title": "Inherit description",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.linkDocsBlock",
+        "title": "Link to a doc block",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.moveToDocsBlock",
+        "title": "Move description to a doc block",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.addMissingColumns",
+        "title": "Add missing columns",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.suggestWithAi",
+        "title": "Suggest a description with AI",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.createDocsBlockForCandidate",
+        "title": "Create shared doc block",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.openLocation",
+        "title": "Open",
+        "category": "dbt Docs Helper"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "dbt-docs-helper.inherit",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.linkDocsBlock",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.moveToDocsBlock",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.addMissingColumns",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.suggestWithAi",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.createDocsBlockForCandidate",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.openLocation",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.candidates.createBlock",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.runParse",
+          "when": "isWorkspaceTrusted"
+        },
+        {
+          "command": "dbt-docs-helper.inheritAll",
+          "when": "editorLangId == yaml || resourceExtname == .yml || resourceExtname == .yaml"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "dbt-docs-helper.coverage.groupBy",
+          "when": "view == dbt-docs-helper.coverage",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dbt-docs-helper.runParse",
+          "when": "view == dbt-docs-helper.coverage && isWorkspaceTrusted",
+          "group": "navigation@2"
+        },
+        {
+          "command": "dbt-docs-helper.refresh",
+          "when": "view == dbt-docs-helper.coverage",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "dbt-docs-helper.candidates.createBlock",
+          "when": "view == dbt-docs-helper.candidates && viewItem == candidate",
+          "group": "inline"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dbt-docs-helper",
+          "title": "dbt Docs Helper",
+          "icon": "resources/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "dbt-docs-helper": [
+        {
+          "id": "dbt-docs-helper.coverage",
+          "name": "Coverage"
+        },
+        {
+          "id": "dbt-docs-helper.workList",
+          "name": "Work list"
+        },
+        {
+          "id": "dbt-docs-helper.candidates",
+          "name": "Doc block candidates",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "dbt-docs-helper.coverage",
+        "contents": "No dbt project with a manifest.json was found.\n[Run dbt parse](command:dbt-docs-helper.runParse)\n[Reload](command:dbt-docs-helper.refresh)",
+        "when": "!dbt-docs-helper.hasProject"
+      }
+    ],
+    "configuration": {
+      "title": "dbt Docs Helper",
+      "properties": {
+        "dbt-docs-helper.manifestPath": {
+          "type": "string",
+          "default": "target/manifest.json",
+          "scope": "resource",
+          "description": "Path to manifest.json, relative to the dbt project (written by `dbt parse`, also by dbt Fusion)."
+        },
+        "dbt-docs-helper.catalogPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Path to catalog.json (from `dbt docs generate`). Used to find columns that exist in the warehouse but not in YAML. Empty: <target-path>/catalog.json if it exists."
+        },
+        "dbt-docs-helper.parseCommand": {
+          "type": "string",
+          "default": "dbt parse",
+          "scope": "resource",
+          "description": "Command that refreshes manifest.json, e.g. `dbtf parse` for dbt Fusion or `uv run dbt parse`."
+        },
+        "dbt-docs-helper.staleManifestWarning": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Warn when manifest.json is older than the project files."
+        },
+        "dbt-docs-helper.docsBlocks.defaultFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Markdown file for new doc blocks, relative to the dbt project, e.g. `models/_docs/columns.md`. Empty: ask every time."
+        },
+        "dbt-docs-helper.docsBlocks.namePattern": {
+          "type": "string",
+          "default": "col_{model}__{column}",
+          "scope": "resource",
+          "markdownDescription": "Name of new doc blocks. `{model}` is the model where the column originates (`{source}_{table}` for sources); `{source}`, `{table}` and `{column}` are also available."
+        },
+        "dbt-docs-helper.docsBlocks.minModels": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "scope": "resource",
+          "description": "A column used in at least this many models is suggested as a shared doc block."
+        },
+        "dbt-docs-helper.inlayHints.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show inherited descriptions as inlay hints next to columns without a description."
+        },
+        "dbt-docs-helper.inlayHints.showDocBlockText": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show the text of linked doc blocks as inlay hints."
+        },
+        "dbt-docs-helper.inlayHints.maxLength": {
+          "type": "number",
+          "default": 60,
+          "minimum": 10,
+          "scope": "resource",
+          "description": "Maximum length of the text in inlay hints."
+        },
+        "dbt-docs-helper.diagnostics.scope": {
+          "type": "string",
+          "enum": [
+            "openFiles",
+            "workspace"
+          ],
+          "default": "openFiles",
+          "description": "Report problems for open files only, or for every YAML file in the project."
+        },
+        "dbt-docs-helper.diagnostics.missingDescription": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "information",
+          "description": "A column or model has no description and none can be inherited."
+        },
+        "dbt-docs-helper.diagnostics.inheritable": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "hint",
+          "description": "A column has no description, but one can be inherited from upstream."
+        },
+        "dbt-docs-helper.diagnostics.conflictingDescriptions": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "hint",
+          "description": "Columns with the same name have different descriptions in different models."
+        },
+        "dbt-docs-helper.diagnostics.docsBlockCandidate": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "hint",
+          "description": "A column is used in many models and could share a doc block."
+        },
+        "dbt-docs-helper.diagnostics.unknownDocsBlock": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "warning",
+          "description": "A description refers to a doc block that does not exist."
+        },
+        "dbt-docs-helper.diagnostics.orphanDocsBlock": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "warning",
+          "description": "A doc block's name refers to a model that does not exist."
+        },
+        "dbt-docs-helper.diagnostics.columnsNotInYaml": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "information",
+          "description": "Columns exist in the warehouse (catalog.json) but not in YAML."
+        },
+        "dbt-docs-helper.coverage.groupBy": {
+          "type": "string",
+          "enum": [
+            "layer",
+            "folder",
+            "tag",
+            "owner",
+            "kind"
+          ],
+          "default": "layer",
+          "description": "How the Coverage view groups resources."
+        },
+        "dbt-docs-helper.coverage.includeInheritable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Count inheritable columns as documented in the status bar."
+        },
+        "dbt-docs-helper.layers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "staging",
+            "intermediate",
+            "marts",
+            "mart",
+            "core",
+            "base",
+            "reporting"
+          ],
+          "description": "Folder names that are recognised as layers."
+        },
+        "dbt-docs-helper.ai.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Allow AI suggestions for descriptions through the VS Code Language Model API (e.g. GitHub Copilot). The model SQL and nearby descriptions are sent to the model."
+        },
+        "dbt-docs-helper.ai.modelFamily": {
+          "type": "string",
+          "default": "",
+          "description": "Preferred language model family, e.g. `gpt-4o` or `claude-sonnet-4`. Empty: the first available model."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test:integration": "npm run build && npm run build:test && node out/test/integration/runTests.js",
+    "package": "npm run build && vsce package --no-dependencies -o dbt-docs-helper.vsix",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.2",
+    "mocha": "^10.8.2"
+  }
+}

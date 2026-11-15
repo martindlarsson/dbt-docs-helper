@@ -1,0 +1,36 @@
+name: Release
+
+# Push a tag like v0.1.0 to publish the extension to the VS Code Marketplace and Open VSX.
+# Needs the repository secrets VSCE_PAT and OVSX_PAT.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs-helper-vsix
+          path: packages/vscode/dbt-docs-helper.vsix
+      - name: Publish to the VS Code Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        working-directory: packages/vscode
+        run: npx vsce publish --no-dependencies --packagePath dbt-docs-helper.vsix
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        working-directory: packages/vscode
+        run: npx --yes ovsx publish dbt-docs-helper.vsix -p "$OVSX_PAT"

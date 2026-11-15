@@ -98,6 +98,29 @@ packages/
 - **AI**: VS Code Language Model API (`vscode.lm`), som använder den modell användaren redan har
   i editorn, alternativt egen API-nyckel. Underlag: SQL, uppströms beskrivningar, kolumnnamn.
 
+## Implementerat i 0.1.0
+
+- **Lineage steg 1 och 2**: namnmatchning via `depends_on`, plus en enkel SQL-läsare
+  (`packages/core/src/sql.ts`) som följer `alias.kolumn`, `x as y`, import-CTE:er
+  (`orders as (select * from {{ ref('stg_orders') }})`) och `select * from final`. Uttryck som
+  refererar en enda kolumn (`sum(p.amount) as amount`) räknas som *transformerade*.
+  Arv som hittats via SQL rankas före ren namnmatchning.
+- **Säkert arv** (skrivs i bulk av "Inherit all" och `inherit --write`): en enda uppströms text,
+  passthrough, spårad i SQL. Omdöpta/transformerade kolumner och namnmatchningar föreslås bara.
+- **Ursprung för blocknamn**: följer kolumnen uppströms så länge den har samma namn och
+  passeras igenom oförändrad. För kandidater väljs det ursprung som flest användningar delar.
+- **Osparade ändringar** i YAML/Markdown används direkt (overlay), manifestet används för
+  lineage, SQL och resurser.
+- **YAML-ändringar** görs som minimala textändringar (infoga/ersätt), inte genom att skriva om
+  dokumentet. Kommentarer, citattecken, CRLF och ordning bevaras.
+- **Prestanda**: 500 modeller × 25 kolumner analyseras på under 0,1 s.
+
+### Kvar att göra
+- Fusions egen kolumnlineage (steg 3).
+- Hantera `versions:` för versionerade modeller.
+- Snabbåtgärd för modellbeskrivningar (idag bara kolumner).
+- Kodlens/överblick i `.md`-filer: vilka kolumner använder blocket.
+
 ## Befintliga verktyg
 
 | Verktyg | Lucka som dbt-docs-helper fyller |

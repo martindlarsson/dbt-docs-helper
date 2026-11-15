@@ -335,3 +335,18 @@ export class Analysis {
     return [...this.resources.values()].flatMap((r) => r.columns);
   }
 }
+
+/** The value to write when inheriting: the same doc() reference, or the text. */
+export function inheritedValue(c: InheritanceCandidate): string {
+  return c.docBlock ? `{{ doc('${c.docBlock}') }}` : c.description;
+}
+
+/**
+ * True when a column can be inherited without asking: a single upstream
+ * text, passed through unchanged and traced in the SQL.
+ */
+export function isSafeInheritance(column: ColumnReport): boolean {
+  if (column.status !== 'inheritable' || !column.yaml || column.candidates.length !== 1) return false;
+  const c = column.candidates[0];
+  return c.kind === 'passthrough' && c.via === 'sql';
+}

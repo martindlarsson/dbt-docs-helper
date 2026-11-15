@@ -9,10 +9,9 @@ import {
   coverage,
   CoverageCounts,
   DbtProject,
-  docRef,
   docsBlockCandidates,
   GroupBy,
-  InheritanceCandidate,
+  inheritedValue,
   orphanDocBlocks,
   percent,
   setColumnDescription,
@@ -224,11 +223,6 @@ export interface PlannedInheritance {
   from: string;
   value: string;
   kind: string;
-}
-
-/** The value to write when inheriting: the same doc() reference, or the text. */
-export function inheritedValue(c: InheritanceCandidate): string {
-  return c.docBlock ? docRef(c.docBlock) : c.description;
 }
 
 export function inheritCommand(analysis: Analysis, opts: InheritOptions): Result {

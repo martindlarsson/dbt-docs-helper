@@ -49,7 +49,7 @@ export function percent(counts: CoverageCounts, includeInheritable = false): num
   return (100 * ok) / counts.columns;
 }
 
-function groupKeys(r: ResourceReport, by: GroupBy): string[] {
+export function groupKeys(r: ResourceReport, by: GroupBy): string[] {
   switch (by) {
     case 'folder':
       return [r.folder];
