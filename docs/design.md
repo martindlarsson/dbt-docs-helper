@@ -147,4 +147,3 @@ packages/
 ## Open questions
 
 - What happens when there are several manifests (e.g. `target/` and the dbt Cloud CLI's own directory)?
-- Final name of the project.
