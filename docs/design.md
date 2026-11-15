@@ -149,6 +149,12 @@ packages/
   (`catalog.json` from `dbt docs generate`, or a direct query) or inferred from the manifest
   (upstream columns' `data_type`, casts in the SQL, seed `column_types`). Useful for model
   contracts and for documentation.
+- **Unused doc blocks**: find `{% docs %}` blocks that no model, source, seed or column
+  references with `{{ doc('…') }}` (e.g. left behind after a model was removed or a column was
+  relinked). Show them in the Problems panel and in a view, with quick fixes to delete the block or
+  link it to the columns whose text it matches. Also usable in CI (`check --fail-on-unused`).
+  This is different from the existing orphan check, which only looks at whether the block's
+  *name* refers to a model that no longer exists.
 
 ## Existing tools
 
