@@ -73,11 +73,16 @@ function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
+/** Paths in manifests written on Windows use backslashes; we always use `/`. */
+export function normalizePath(p: unknown): string {
+  return typeof p === 'string' ? p.replace(/\\/g, '/') : '';
+}
+
 /** `jaffle://models/staging/_staging.yml` -> `models/staging/_staging.yml` */
 export function stripPatchPath(patchPath: unknown): string | undefined {
   if (typeof patchPath !== 'string' || patchPath.length === 0) return undefined;
   const idx = patchPath.indexOf('://');
-  return idx >= 0 ? patchPath.slice(idx + 3) : patchPath;
+  return normalizePath(idx >= 0 ? patchPath.slice(idx + 3) : patchPath);
 }
 
 function readColumns(raw: any): Map<string, ColumnInfo> {
@@ -118,7 +123,7 @@ export function parseManifest(json: unknown): Manifest {
       kind: kind as ResourceKind,
       name: str(node.name),
       packageName: str(node.package_name),
-      originalFilePath: str(node.original_file_path),
+      originalFilePath: normalizePath(node.original_file_path),
       yamlPath: stripPatchPath(node.patch_path),
       fqn: strArray(node.fqn),
       tags: strArray(node.tags ?? node.config?.tags),
@@ -140,9 +145,9 @@ export function parseManifest(json: unknown): Manifest {
       name: str(src.name),
       sourceName: str(src.source_name),
       packageName: str(src.package_name),
-      originalFilePath: str(src.original_file_path),
+      originalFilePath: normalizePath(src.original_file_path),
       // Sources are defined in YAML, so the YAML file is the original file.
-      yamlPath: stripPatchPath(src.patch_path) ?? (str(src.original_file_path) || undefined),
+      yamlPath: stripPatchPath(src.patch_path) ?? (normalizePath(src.original_file_path) || undefined),
       fqn: strArray(src.fqn),
       tags: strArray(src.tags ?? src.config?.tags),
       owner: readOwner(src),
@@ -158,7 +163,7 @@ export function parseManifest(json: unknown): Manifest {
       uniqueId,
       name: str(doc.name),
       packageName: str(doc.package_name),
-      originalFilePath: str(doc.original_file_path),
+      originalFilePath: normalizePath(doc.original_file_path),
       contents: str(doc.block_contents),
     });
   }

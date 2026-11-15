@@ -250,6 +250,10 @@ export class ProjectManager implements vscode.Disposable {
 
   /** Run the configured parse command in a terminal. */
   runParse(root?: string): void {
+    if (vscode.workspace.isTrusted === false) {
+      void vscode.window.showWarningMessage('dbt-docs-helper: trust this workspace to run dbt parse from the editor.');
+      return;
+    }
     const state = root ? this.states.get(root) : this.projects()[0];
     const cwd = state?.project.root ?? root ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!cwd) return;

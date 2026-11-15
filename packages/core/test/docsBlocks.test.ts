@@ -33,3 +33,20 @@ describe('doc blocks', () => {
     expect(modelPartOfBlockName('col_{model}__{column}', 'something_else')).toBeUndefined();
   });
 });
+
+import { parseManifest } from '../src';
+
+describe('manifest paths', () => {
+  it('normalises Windows paths', () => {
+    const m = parseManifest({
+      metadata: { project_name: 'p' },
+      nodes: {
+        'model.p.a': { resource_type: 'model', name: 'a', package_name: 'p', original_file_path: 'models\\staging\\a.sql', patch_path: 'p://models\\staging\\_a.yml' },
+      },
+      sources: {},
+    });
+    const r = m.resources.get('model.p.a')!;
+    expect(r.originalFilePath).toBe('models/staging/a.sql');
+    expect(r.yamlPath).toBe('models/staging/_a.yml');
+  });
+});
