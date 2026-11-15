@@ -3,6 +3,7 @@
  * workspace, in sync with the manifest, the files on disk and unsaved editor
  * buffers.
  */
+import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -14,7 +15,16 @@ export interface ProjectState {
   /** Null when the manifest could not be loaded. */
   error?: string;
   stale?: StalenessResult;
+  /** Error from the last background parse, if it failed. */
+  parseError?: string;
 }
+
+/** Extensions that keep manifest.json up to date in the background. */
+const BACKGROUND_PARSERS = ['dbtLabsInc.dbt', 'innoverio.vscode-dbt-power-user'];
+/** Wait this long before telling the user, so a background parse can finish. */
+const STALE_GRACE_MS = 30_000;
+/** A manifest written this soon after we started a parse is ours. */
+const OWN_PARSE_WINDOW_MS = 5 * 60_000;
 
 export class ProjectManager implements vscode.Disposable {
   private states = new Map<string, ProjectState>();
@@ -24,7 +34,16 @@ export class ProjectManager implements vscode.Disposable {
   private changeEmitter = new vscode.EventEmitter<void>();
   private changeTimer?: NodeJS.Timeout;
   private staleTimer?: NodeJS.Timeout;
-  private warnedStale = new Set<string>();
+  private graceTimer?: NodeJS.Timeout;
+  /** Projects we already showed the stale notification for (this session). */
+  private notified = new Set<string>();
+  /** When each project first became stale. */
+  private staleSince = new Map<string, number>();
+  /** Projects whose manifest is rewritten by something other than us. */
+  private externalUpdates = new Set<string>();
+  private lastOwnParse = new Map<string, number>();
+  private parseRunning = new Set<string>();
+  private parseAgain = new Set<string>();
   readonly onDidChange = this.changeEmitter.event;
   readonly output = vscode.window.createOutputChannel('dbt-docs-helper');
 
@@ -154,7 +173,7 @@ export class ProjectManager implements vscode.Disposable {
     if (this.isManifest(state, uri)) {
       try {
         state.project.reloadManifest({ catalogPath: settings.catalogPath(uri) || undefined });
-        this.warnedStale.delete(state.project.root);
+        this.onManifestWritten(state.project.root);
         this.output.appendLine(`Reloaded manifest for ${state.project.root}`);
       } catch (err) {
         this.output.appendLine(`Could not reload manifest: ${err instanceof Error ? err.message : err}`);
@@ -218,34 +237,131 @@ export class ProjectManager implements vscode.Disposable {
 
   // ---------------------------------------------------------------------------
   // Stale manifest
+  //
+  // Goal: never nag. Documentation edits do not count (see core/staleness.ts).
+  // In "auto" mode a notification is shown at most once per session, only
+  // after a grace period, and never when something else (the dbt extension
+  // with Fusion, dbt Power User, a terminal) keeps the manifest up to date.
 
   private scheduleStaleCheck(delay = 1500): void {
     if (this.staleTimer) clearTimeout(this.staleTimer);
     this.staleTimer = setTimeout(() => this.checkStale(), delay);
   }
 
+  /** True if another extension that refreshes manifest.json is installed. */
+  private backgroundExtension(): string | undefined {
+    const extensions = (vscode as { extensions?: typeof vscode.extensions }).extensions;
+    if (!extensions?.getExtension) return undefined;
+    for (const id of BACKGROUND_PARSERS) {
+      const ext = extensions.getExtension(id);
+      if (ext) return ext.packageJSON?.displayName ?? id;
+    }
+    return undefined;
+  }
+
+  /** Effective behaviour for a project. */
+  staleMode(root: string): 'statusBar' | 'notification' | 'autoParse' | 'off' {
+    const mode = settings.staleManifest(vscode.Uri.file(root));
+    if (mode !== 'auto') return mode;
+    if (this.externalUpdates.has(root) || this.backgroundExtension()) return 'statusBar';
+    return 'notification';
+  }
+
+  /** Called when the manifest changed on disk. */
+  private onManifestWritten(root: string): void {
+    const ownRun = this.parseRunning.has(root) || Date.now() - (this.lastOwnParse.get(root) ?? 0) < OWN_PARSE_WINDOW_MS;
+    if (!ownRun && !this.externalUpdates.has(root)) {
+      this.externalUpdates.add(root);
+      this.output.appendLine(`manifest.json in ${root} is kept up to date by another tool; stale warnings stay in the status bar.`);
+    }
+    this.staleSince.delete(root);
+  }
+
   private checkStale(): void {
     let changed = false;
     for (const state of this.states.values()) {
+      const root = state.project.root;
       const result = checkStaleness(state.project);
-      if (result.stale !== state.stale?.stale) changed = true;
+      if (result.stale !== state.stale?.stale || result.reason !== state.stale?.reason) changed = true;
       state.stale = result;
-      if (result.stale && settings.staleManifestWarning(vscode.Uri.file(state.project.root)) && !this.warnedStale.has(state.project.root)) {
-        this.warnedStale.add(state.project.root);
-        const name = state.project.config.name;
-        const newest = result.newestFile ? ` than ${result.newestFile}` : '';
-        void vscode.window
-          .showWarningMessage(
-            `dbt-docs-helper: manifest.json for "${name}" is older${newest}. Upstream descriptions and lineage may be out of date.`,
-            'Run dbt parse',
-            'Ignore',
-          )
-          .then((choice) => {
-            if (choice === 'Run dbt parse') void vscode.commands.executeCommand('dbt-docs-helper.runParse', state.project.root);
-          });
+      if (!result.stale) {
+        this.staleSince.delete(root);
+        continue;
+      }
+      const mode = this.staleMode(root);
+      if (mode === 'autoParse') {
+        this.runParseInBackground(root);
+      } else if (mode === 'notification' && !this.notified.has(root)) {
+        const since = this.staleSince.get(root) ?? Date.now();
+        this.staleSince.set(root, since);
+        const wait = since + STALE_GRACE_MS - Date.now();
+        if (wait > 0) {
+          // Give a background parse a chance to finish first.
+          if (this.graceTimer) clearTimeout(this.graceTimer);
+          this.graceTimer = setTimeout(() => this.checkStale(), wait + 100);
+        } else {
+          this.notifyStale(state);
+        }
       }
     }
     if (changed) this.changeEmitter.fire();
+  }
+
+  private notifyStale(state: ProjectState): void {
+    const root = state.project.root;
+    this.notified.add(root);
+    const reason = state.stale?.reason ? ` (${state.stale.reason})` : '';
+    void vscode.window
+      .showInformationMessage(
+        `dbt-docs-helper: manifest.json for "${state.project.config.name}" is out of date${reason}. Lineage for new or changed models may be missing.`,
+        'Run dbt parse',
+        'Always run automatically',
+        "Don't show again",
+      )
+      .then(async (choice) => {
+        const config = vscode.workspace.getConfiguration('dbt-docs-helper', vscode.Uri.file(root));
+        if (choice === 'Run dbt parse') this.runParse(root);
+        else if (choice === 'Always run automatically') {
+          await config.update('staleManifest', 'autoParse', vscode.ConfigurationTarget.Workspace);
+          this.runParseInBackground(root);
+        } else if (choice === "Don't show again") {
+          await config.update('staleManifest', 'statusBar', vscode.ConfigurationTarget.Global);
+        }
+      });
+  }
+
+  /** True while a background parse runs for the project. */
+  isParsing(root: string): boolean {
+    return this.parseRunning.has(root);
+  }
+
+  /** Run the parse command without a terminal; output goes to the log. */
+  runParseInBackground(root: string): void {
+    if (vscode.workspace.isTrusted === false) return;
+    if (this.parseRunning.has(root)) {
+      this.parseAgain.add(root);
+      return;
+    }
+    const command = settings.parseCommand(vscode.Uri.file(root));
+    this.parseRunning.add(root);
+    this.lastOwnParse.set(root, Date.now());
+    this.changeEmitter.fire();
+    this.output.appendLine(`$ ${command}   (in ${root})`);
+    const child = spawn(command, { cwd: root, shell: true, env: process.env });
+    const log = (data: Buffer) => this.output.append(data.toString());
+    child.stdout?.on('data', log);
+    child.stderr?.on('data', log);
+    const done = (code: number | null, error?: Error) => {
+      this.parseRunning.delete(root);
+      this.lastOwnParse.set(root, Date.now());
+      const state = this.states.get(root);
+      if (state) state.parseError = code === 0 ? undefined : error?.message ?? `"${command}" exited with code ${code}. See the dbt-docs-helper log.`;
+      this.output.appendLine(code === 0 ? 'parse finished' : `parse failed: ${state?.parseError}`);
+      this.changeEmitter.fire();
+      if (this.parseAgain.delete(root)) this.scheduleStaleCheck();
+    };
+    child.on('error', (err) => done(null, err));
+    child.on('close', (code) => done(code));
   }
 
   /** Run the configured parse command in a terminal. */
@@ -257,6 +373,7 @@ export class ProjectManager implements vscode.Disposable {
     const state = root ? this.states.get(root) : this.projects()[0];
     const cwd = state?.project.root ?? root ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!cwd) return;
+    this.lastOwnParse.set(cwd, Date.now());
     const command = settings.parseCommand(vscode.Uri.file(cwd));
     const name = 'dbt-docs-helper';
     let terminal = vscode.window.terminals.find((t) => t.name === name && (t.creationOptions as vscode.TerminalOptions).cwd === cwd);
@@ -268,6 +385,7 @@ export class ProjectManager implements vscode.Disposable {
   dispose(): void {
     if (this.changeTimer) clearTimeout(this.changeTimer);
     if (this.staleTimer) clearTimeout(this.staleTimer);
+    if (this.graceTimer) clearTimeout(this.graceTimer);
     this.disposables.forEach((d) => d.dispose());
     this.changeEmitter.dispose();
     this.output.dispose();

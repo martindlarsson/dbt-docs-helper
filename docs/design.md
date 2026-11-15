@@ -17,7 +17,7 @@
 | Coverage | Includes `sources` and seeds |
 | Distribution | VS Code Marketplace and Open VSX |
 | Doc block candidate | The column occurs in ≥ 3 models (configurable). Stronger suggestion if the text is identical |
-| Stale manifest | Warning with a button that runs `dbt parse` (command configurable, e.g. `dbtf parse` for Fusion) |
+| Stale manifest | Must not disturb. Documentation edits never count (YAML/Markdown are read directly); only SQL/Python, seeds, `dbt_project.yml` and new sources do. Default: status bar only when another tool (the dbt extension with Fusion, dbt Power User, a terminal) keeps the manifest updated, otherwise at most one notification per session after a 30 s grace period. Optional `autoParse` runs the parse command (configurable, e.g. `dbtf parse`) in the background |
 
 ## Important: inheritance in dbt
 

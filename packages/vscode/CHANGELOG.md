@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Stale manifest warnings no longer nag: documentation edits never count, a background tool that
+  updates the manifest (e.g. the dbt extension with Fusion) is detected, and there is at most one
+  notification per session, after 30 seconds. New setting `staleManifest`
+  (`auto`, `statusBar`, `notification`, `autoParse`, `off`) replaces `staleManifestWarning`.
+- The status bar shows the stale state and runs the parse command when clicked.
 - Doc block candidates get a global name, `col_{column}` (setting `docsBlocks.sharedNamePattern`).
 - A candidate disappears once you have linked its columns to a doc block.
 - Columns that are only in `catalog.json` are no longer listed as candidates or as "Write by hand";

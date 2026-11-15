@@ -40,7 +40,7 @@ coverage / check:
   --fail-under <percent>    Exit with code 1 when column coverage is lower
   --include-inheritable     Count inheritable columns as documented
 check:
-  --fail-on-stale           Fail when manifest.json is older than the project files
+  --fail-on-stale           Fail when manifest.json is out of date (SQL, seeds, dbt_project.yml or new sources)
   --fail-on-orphans         Fail when a doc block refers to a model that does not exist
   --name-pattern <pattern>  Doc block naming pattern (default: col_{model}__{column})
 missing:

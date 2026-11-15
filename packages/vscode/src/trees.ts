@@ -120,7 +120,7 @@ abstract class BaseTree implements vscode.TreeDataProvider<Node> {
       case 'project': {
         const item = new vscode.TreeItem(node.state.project.config.name, vscode.TreeItemCollapsibleState.Expanded);
         item.iconPath = new vscode.ThemeIcon('database');
-        item.description = node.state.stale?.stale ? '⚠ manifest out of date' : vscode.workspace.asRelativePath(node.state.project.root);
+        item.description = node.state.stale?.stale && this.manager.staleMode(node.state.project.root) !== 'off' ? '⚠ manifest out of date' : vscode.workspace.asRelativePath(node.state.project.root);
         return item;
       }
       case 'message': {
@@ -144,8 +144,8 @@ export class CoverageTree extends BaseTree {
     const by = settings.groupBy();
     const report = coverage(this.analysis(state), by);
     const nodes: Node[] = [];
-    if (state.stale?.stale) {
-      nodes.push({ type: 'message', text: 'manifest.json is out of date — run dbt parse', command: { title: 'Run dbt parse', command: 'dbt-docs-helper.runParse', arguments: [state.project.root] } });
+    if (state.stale?.stale && this.manager.staleMode(state.project.root) !== 'off') {
+      nodes.push({ type: 'message', text: `manifest.json is out of date (${state.stale.reason ?? 'files changed'}) — click to run parse`, command: { title: 'Run dbt parse', command: 'dbt-docs-helper.runParse', arguments: [state.project.root] } });
     }
     nodes.push({ type: 'group', state, key: `Total`, counts: report.total, by });
     for (const g of report.groups) nodes.push({ type: 'group', state, key: g.key, counts: g, by });

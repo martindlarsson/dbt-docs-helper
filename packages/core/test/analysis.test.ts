@@ -163,3 +163,39 @@ describe('analysis of the jaffle fixture', () => {
     expect(orphanDocBlocks(new Analysis(p)).map((o) => o.model)).toEqual(['old_model']);
   });
 });
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import { checkStaleness } from '../src';
+
+describe('stale manifest', () => {
+  function copy(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ddh-stale-'));
+    fs.cpSync(ROOT, dir, { recursive: true });
+    const now = new Date();
+    fs.utimesSync(path.join(dir, 'target/manifest.json'), now, now);
+    return dir;
+  }
+  const future = new Date(Date.now() + 60_000);
+
+  it('ignores documentation edits', () => {
+    const dir = copy();
+    fs.utimesSync(path.join(dir, 'models/marts/_marts.yml'), future, future);
+    fs.utimesSync(path.join(dir, 'models/_docs/columns.md'), future, future);
+    expect(checkStaleness(DbtProject.load(dir)).stale).toBe(false);
+  });
+
+  it('reacts to SQL changes', () => {
+    const dir = copy();
+    fs.utimesSync(path.join(dir, 'models/marts/orders.sql'), future, future);
+    expect(checkStaleness(DbtProject.load(dir))).toMatchObject({ stale: true, reason: 'models/marts/orders.sql changed' });
+  });
+
+  it('reacts to new sources in YAML', () => {
+    const dir = copy();
+    const p = DbtProject.load(dir);
+    const file = 'models/staging/_sources.yml';
+    p.setFileText(file, `${p.yamlFiles.get(file)!.text}      - name: payments\n`);
+    expect(checkStaleness(p)).toMatchObject({ stale: true, reason: 'new source crm.payments' });
+  });
+});

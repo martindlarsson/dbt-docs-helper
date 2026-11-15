@@ -42,7 +42,7 @@ See [packages/vscode/README.md](packages/vscode/README.md) for the features. In 
   add missing columns (from `catalog.json`), inherit everything safe in the file, AI suggestion (opt-in).
 - **Problems panel** with configurable severity per rule.
 - **Side panel**: coverage per layer/folder/tag/owner/kind, work list, doc block candidates.
-- **Stale manifest warning** with a button that runs `dbt parse` (configurable, e.g. `dbtf parse`).
+- **Quiet stale-manifest handling**: documentation edits never need `dbt parse`; when SQL changes, a status bar icon (or one notification per session, or a silent background parse) instead of repeated pop-ups.
 
 ### Try it locally
 

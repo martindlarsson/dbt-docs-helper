@@ -249,11 +249,25 @@
           "scope": "resource",
           "description": "Command that refreshes manifest.json, e.g. `dbtf parse` for dbt Fusion or `uv run dbt parse`."
         },
-        "dbt-docs-helper.staleManifestWarning": {
-          "type": "boolean",
-          "default": true,
+        "dbt-docs-helper.staleManifest": {
+          "type": "string",
           "scope": "resource",
-          "description": "Warn when manifest.json is older than the project files."
+          "default": "auto",
+          "enum": [
+            "auto",
+            "statusBar",
+            "notification",
+            "autoParse",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Status bar only when another tool (e.g. the dbt extension with Fusion, or dbt Power User) keeps manifest.json up to date; otherwise one notification per session after 30 seconds, then status bar only.",
+            "Only show a warning icon in the status bar. Click it to run the parse command.",
+            "Show a notification (at most once per session) after 30 seconds.",
+            "Run the parse command silently in the background when SQL, seeds or dbt_project.yml change.",
+            "Never warn."
+          ],
+          "markdownDescription": "What to do when `manifest.json` is out of date. Only changes to SQL/Python models, seeds, `dbt_project.yml` and new sources count: editing documentation in YAML or Markdown never does, since those files are read directly."
         },
         "dbt-docs-helper.docsBlocks.defaultFile": {
           "type": "string",

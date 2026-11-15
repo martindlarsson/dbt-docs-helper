@@ -310,7 +310,7 @@ export function checkCommand(analysis: Analysis, opts: CheckOptions): Result {
   const problems: string[] = [];
   const stale = checkStaleness(analysis.project);
   if (stale.stale) {
-    const msg = `manifest.json is older than ${stale.newestFile ?? 'the project files'}. Run \`dbt parse\`.`;
+    const msg = `manifest.json is out of date (${stale.reason ?? 'project files changed'}). Run \`dbt parse\`.`;
     problems.push(opts.failOnStale ? `ERROR: ${msg}` : `WARNING: ${msg}`);
   }
   const orphans = orphanDocBlocks(analysis, opts.namePattern);

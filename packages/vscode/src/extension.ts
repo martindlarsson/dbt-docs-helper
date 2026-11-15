@@ -69,12 +69,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     }
     const total = coverage(manager.analysis(state.project)).total;
     const pct = percent(total, settings.includeInheritable()).toFixed(0);
-    status.text = `${state.stale?.stale ? '$(warning)' : '$(book)'} Docs ${pct}%`;
-    status.tooltip = new vscode.MarkdownString(
+    const root = state.project.root;
+    const parsing = manager.isParsing(root);
+    const stale = state.stale?.stale && manager.staleMode(root) !== 'off';
+    const icon = parsing ? '$(sync~spin)' : state.parseError ? '$(error)' : stale ? '$(warning)' : '$(book)';
+    status.text = `${icon} Docs ${pct}%`;
+    let note = '';
+    if (parsing) note = '\n\nRunning the parse command…';
+    else if (state.parseError) note = `\n\n$(error) ${state.parseError}\n\nClick to run it in a terminal.`;
+    else if (stale) note = `\n\n$(warning) manifest.json is out of date (${state.stale?.reason ?? 'project files changed'}). Click to run the parse command.`;
+    const tooltip = new vscode.MarkdownString(
       `**dbt-docs-helper** — ${state.project.config.name}\n\n` +
         `${total.documented} of ${total.columns} columns documented, ${total.inheritable} can be inherited, ${total.missing} must be written.` +
-        (state.stale?.stale ? `\n\n⚠ manifest.json is older than ${state.stale.newestFile ?? 'the project files'}.` : ''),
+        note,
+      true,
     );
+    status.tooltip = tooltip;
+    status.command =
+      !parsing && (stale || state.parseError)
+        ? { title: 'Run parse', command: 'dbt-docs-helper.runParse', arguments: [root] }
+        : 'workbench.view.extension.dbt-docs-helper';
     status.show();
   };
   context.subscriptions.push(manager.onDidChange(updateStatus), vscode.window.onDidChangeActiveTextEditor(updateStatus));

@@ -65,10 +65,22 @@ The **dbt Docs Helper** view in the activity bar shows
 - a **Work list** with the columns that must be written by hand first, then the ones that can be inherited, and the columns that are in the warehouse (`catalog.json`) but not in YAML, with a button to add them
 - **Doc block candidates**: columns used in many models, strongest when the text is already the same everywhere
 
-### Stale manifest
+### Stale manifest, without nagging
 
-When `manifest.json` is older than your SQL/YAML files you get a warning with a **Run dbt parse**
-button. Set `dbt-docs-helper.parseCommand` to e.g. `dbtf parse` for Fusion or `uv run dbt parse`.
+YAML and Markdown are read directly, so editing documentation never needs a new manifest. Only
+changes to SQL/Python models, seeds, `dbt_project.yml` and new sources do.
+
+`dbt-docs-helper.staleManifest` decides what happens then:
+
+| Value | Behaviour |
+|---|---|
+| `auto` (default) | If another tool keeps `manifest.json` up to date (the dbt extension with Fusion, dbt Power User, or you in a terminal), only a warning icon in the status bar. Otherwise one notification per session, after 30 seconds |
+| `statusBar` | Only the status bar icon. Click it to run the parse command |
+| `notification` | A notification, at most once per session |
+| `autoParse` | Run the parse command silently in the background |
+| `off` | Nothing |
+
+Set `dbt-docs-helper.parseCommand` to e.g. `dbtf parse` for Fusion or `uv run dbt parse`.
 
 ## Doc block names
 
