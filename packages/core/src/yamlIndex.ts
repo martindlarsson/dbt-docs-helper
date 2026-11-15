@@ -48,9 +48,22 @@ export interface YamlResource {
   lastValueEnd: number;
 }
 
+/** A top-level list such as `models:` or `seeds:`. */
+export interface YamlSection {
+  key: string;
+  keyRange: OffsetRange;
+  /** End offset of the last item, or of the key when the list is empty. */
+  end: number;
+  /** Column of the `-` of the items (key column + 2 when empty). */
+  dashIndent: number;
+  flow: boolean;
+  empty: boolean;
+}
+
 export interface YamlFileIndex {
   text: string;
   resources: YamlResource[];
+  sections: YamlSection[];
   errors: string[];
   /** Offsets where each line starts. */
   lineStarts: number[];
@@ -189,14 +202,40 @@ export function indexYaml(text: string): YamlFileIndex {
   const lineStarts = computeLineStarts(text);
   const errors = doc.errors.map((e) => e.message);
   const resources: YamlResource[] = [];
+  const sections: YamlSection[] = [];
   const root = doc.contents;
-  if (!isMap(root)) return { text, resources, errors, lineStarts };
+  if (!isMap(root)) return { text, resources, errors, lineStarts, sections };
 
   for (const section of root.items) {
     if (!isPair(section) || !isScalar(section.key)) continue;
     const key = String(section.key.value);
     const seq = section.value;
-    if (!isSeq(seq)) continue;
+    const keyRange = nodeRange(section.key as Node)!;
+    const keyColumn = columnOf(lineStarts, keyRange[0]);
+    if (!isSeq(seq)) {
+      // `models:` with nothing (or null) after it.
+      if (seq === null || (isScalar(seq) && seq.value === null)) {
+        sections.push({ key, keyRange, end: keyRange[1], dashIndent: keyColumn + 2, flow: false, empty: true });
+      }
+      continue;
+    }
+    const lastItem = seq.items[seq.items.length - 1] as Node | undefined;
+    const firstItem = seq.items[0] as Node | undefined;
+    let dashIndent = keyColumn + 2;
+    if (firstItem && nodeRange(firstItem)) {
+      const start = nodeRange(firstItem)![0];
+      const lineStart = lineStarts[offsetToPosition(lineStarts, start).line];
+      const dash = text.slice(lineStart, start).lastIndexOf('-');
+      if (dash >= 0) dashIndent = dash;
+    }
+    sections.push({
+      key,
+      keyRange,
+      end: (lastItem && nodeRange(lastItem)?.[1]) ?? keyRange[1],
+      dashIndent,
+      flow: Boolean(seq.flow),
+      empty: seq.items.length === 0,
+    });
     const kind = SECTION_KINDS[key];
     if (kind) {
       for (const item of seq.items) {
@@ -218,7 +257,7 @@ export function indexYaml(text: string): YamlFileIndex {
       }
     }
   }
-  return { text, resources, errors, lineStarts };
+  return { text, resources, errors, lineStarts, sections };
 }
 
 /** Find the resource and column at an offset, if any. */

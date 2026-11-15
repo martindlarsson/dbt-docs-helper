@@ -57,8 +57,7 @@ button.tab { background: transparent; color: var(--vscode-descriptionForeground)
 button.tab.active { color: var(--vscode-foreground); border-color: var(--border); }
 
 ul { list-style: none; margin: 6px 0 0; padding: 0; }
-li.column { padding: 6px 6px 6px 8px; border-left: 2px solid transparent; border-bottom: 1px solid var(--border); cursor: pointer; }
-li.column:hover { background: var(--vscode-list-hoverBackground); }
+li.column { padding: 8px 6px 8px 8px; border-left: 2px solid transparent; border-bottom: 1px solid var(--border); }
 li.column.missing { border-left-color: var(--missing); }
 li.column.inheritable { border-left-color: var(--inheritable); }
 .col-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -73,8 +72,29 @@ li.column.inheritable { border-left-color: var(--inheritable); }
 .relations li.clickable:hover { background: var(--vscode-list-hoverBackground); }
 .right { margin-left: auto; }
 
-/* Finished columns: show their actions only on hover or keyboard focus, to keep the list calm. */
-li.column.documented .row-actions { display: none; }
-li.column.documented:hover .row-actions,
-li.column.documented:focus-within .row-actions { display: flex; }
-li.column:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+
+/* Editing */
+textarea {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 4px; resize: none; overflow: hidden;
+  font: inherit; line-height: 1.4; padding: 4px 6px; border-radius: 2px;
+  color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+}
+textarea::placeholder { color: var(--vscode-input-placeholderForeground); font-style: italic; }
+textarea:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+textarea.saving { border-color: var(--vscode-focusBorder); }
+.model-description textarea { min-height: 2.6em; }
+.status { margin-left: auto; font-size: 0.9em; color: var(--vscode-descriptionForeground); }
+.col-head a { font-family: var(--vscode-editor-font-family); font-weight: 600; color: var(--vscode-foreground); }
+.col-head a:hover { color: var(--vscode-textLink-foreground); }
+.type { font-family: var(--vscode-editor-font-family); color: var(--vscode-descriptionForeground); font-size: 0.9em; padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; }
+.row-actions a { font-size: 0.9em; }
+.hint { margin-top: 18px; }
+.relations-grid { display: grid; grid-template-columns: 1fr; column-gap: 24px; }
+
+/* As an editor tab there is more room. */
+body.host-panel { padding: 0 24px 24px; }
+body.host-panel main { max-width: 900px; }
+@media (min-width: 640px) {
+  body.host-panel .relations-grid { grid-template-columns: 1fr 1fr; }
+}

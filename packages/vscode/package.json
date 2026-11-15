@@ -31,7 +31,8 @@
     "coverage"
   ],
   "activationEvents": [
-    "workspaceContains:**/dbt_project.yml"
+    "workspaceContains:**/dbt_project.yml",
+    "onWebviewPanel:dbt-docs-helper.docEditor"
   ],
   "main": "./dist/extension.js",
   "capabilities": {
@@ -118,12 +119,6 @@
         "icon": "$(add)"
       },
       {
-        "command": "dbt-docs-helper.showModelSummary",
-        "title": "Show model summary",
-        "category": "dbt Docs Helper",
-        "icon": "$(preview)"
-      },
-      {
         "command": "dbt-docs-helper.editDescription",
         "title": "Edit column description",
         "category": "dbt Docs Helper"
@@ -132,6 +127,12 @@
         "command": "dbt-docs-helper.editModelDescription",
         "title": "Edit model description",
         "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.openDocEditor",
+        "title": "Document this model",
+        "category": "dbt Docs Helper",
+        "icon": "$(book)"
       }
     ],
     "menus": {
@@ -191,6 +192,11 @@
       ],
       "view/title": [
         {
+          "command": "dbt-docs-helper.openDocEditor",
+          "when": "view == dbt-docs-helper.model",
+          "group": "navigation@1"
+        },
+        {
           "command": "dbt-docs-helper.coverage.groupBy",
           "when": "view == dbt-docs-helper.coverage",
           "group": "navigation@1"
@@ -220,8 +226,8 @@
       ],
       "editor/title": [
         {
-          "command": "dbt-docs-helper.showModelSummary",
-          "when": "dbt-docs-helper.hasProject && resourceExtname =~ /^\\.(sql|ya?ml|py|csv)$/",
+          "command": "dbt-docs-helper.openDocEditor",
+          "when": "dbt-docs-helper.hasProject && resourceExtname =~ /^\\.(sql|py|csv|ya?ml)$/",
           "group": "navigation@90"
         }
       ]
@@ -239,7 +245,7 @@
       "dbt-docs-helper": [
         {
           "id": "dbt-docs-helper.model",
-          "name": "Model",
+          "name": "Document",
           "type": "webview"
         },
         {
@@ -484,6 +490,11 @@
           "type": "string",
           "default": "",
           "description": "Preferred language model family, e.g. `gpt-4o` or `claude-sonnet-4`. Empty: the first available model."
+        },
+        "dbt-docs-helper.docEditor.autoSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save the YAML (and Markdown) file right away when you edit a description in the documentation editor. Files that already had unsaved changes are left unsaved."
         }
       }
     }

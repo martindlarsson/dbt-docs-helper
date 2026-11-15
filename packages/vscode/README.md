@@ -57,12 +57,25 @@ Configurable per rule (`error`, `warning`, `information`, `hint`, `off`):
 | `diagnostics.orphanDocsBlock` | warning | Block name refers to a model that was renamed or removed |
 | `diagnostics.columnsNotInYaml` | information | Columns in `catalog.json` that are not in YAML |
 
-### Model summary
+### Documentation editor: write docs without opening the YAML
 
-The **Model** view follows the editor: open a model's SQL file (or put the cursor on a model in a
-YAML file) to see its description, every column with its status and type, what it can inherit,
-and its upstream and downstream models with their coverage. The fixes (inherit, edit, link or move
-to a doc block, AI) are one click away, and clicking a column or a related model opens it.
+Open a model's SQL file and click **Document this model** (the book icon in the editor title).
+The documentation editor opens in a tab next to the SQL, with the model name, its columns and
+their data types, and a text field for every description:
+
+- Type a description and leave the field (or press Enter): it is written to YAML and saved.
+  Comments and formatting in the YAML are kept. Clearing a field removes the description.
+- Columns that are not in YAML yet (from `catalog.json`, or from the SQL for a model that has not
+  been built) are added when you describe them. A model without a YAML entry gets one, in the
+  YAML file in its folder or in a new `_<folder>__models.yml`.
+- Empty columns show what they can inherit; **Use ↳ stg_orders** writes it (the same
+  `{{ doc() }}` reference when upstream uses a doc block).
+- A column linked to a doc block shows the block's text: edit it to change it everywhere, or
+  **Unlink** to change it for this column only.
+- Upstream and downstream models, with their coverage, are one click away.
+
+The editor follows the file you have open, and the same editor is in the side bar (**Document**).
+Turn off automatic saving with `dbt-docs-helper.docEditor.autoSave`.
 
 ### Coverage, work list and doc-block candidates
 

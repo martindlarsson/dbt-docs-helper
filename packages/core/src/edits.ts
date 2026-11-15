@@ -133,3 +133,88 @@ export function applyEdits(text: string, edits: TextEdit[]): string {
   for (const e of sorted) out = out.slice(0, e.start) + e.newText + out.slice(e.end);
   return out;
 }
+
+/**
+ * Remove the `description:` of a column or resource (block style only):
+ * deletes its whole line(s). Returns undefined when there is nothing to remove.
+ */
+export function removeDescription(
+  index: YamlFileIndex,
+  target: Pick<YamlColumn, 'description' | 'flow'>,
+): TextEdit | undefined {
+  const d = target.description;
+  if (!d) return undefined;
+  if (target.flow) return { start: d.valueRange[0], end: d.valueRange[1], newText: '""' };
+  const { text, lineStarts } = index;
+  const start = lineStarts[offsetToPosition(lineStarts, d.keyRange[0]).line];
+  // End: after the newline that ends the value (block scalars span several lines).
+  let end = Math.max(d.valueRange[1], d.keyRange[1]);
+  if (end > 0 && text[end - 1] === '\n') return { start, end, newText: '' };
+  const nl = text.indexOf('\n', end);
+  end = nl < 0 ? text.length : nl + 1;
+  return { start, end, newText: '' };
+}
+
+export interface NewResourceEntry {
+  name: string;
+  description?: string;
+  columns?: { name: string; description?: string }[];
+}
+
+const SECTION_FOR_KIND: Record<string, string> = { model: 'models', seed: 'seeds', snapshot: 'snapshots' };
+
+function renderEntry(entry: NewResourceEntry, dashIndent: number, nl: string): string {
+  const key = ' '.repeat(dashIndent + 2);
+  const lines = [`${' '.repeat(dashIndent)}- name: ${formatYamlScalar(entry.name, dashIndent + 2)}`];
+  if (entry.description) lines.push(`${key}description: ${formatYamlScalar(entry.description, dashIndent + 2).replace(/\n/g, nl)}`);
+  if (entry.columns && entry.columns.length > 0) {
+    lines.push(`${key}columns:`);
+    for (const c of entry.columns) {
+      lines.push(`${key}  - name: ${formatYamlScalar(c.name, dashIndent + 6)}`);
+      if (c.description) lines.push(`${key}    description: ${formatYamlScalar(c.description, dashIndent + 6).replace(/\n/g, nl)}`);
+    }
+  }
+  return lines.join(nl);
+}
+
+/**
+ * Add a model/seed/snapshot entry to an existing properties file: appended to
+ * its `models:` (etc.) list, or in a new list at the end of the file.
+ */
+export function addResourceEntry(index: YamlFileIndex, kind: 'model' | 'seed' | 'snapshot', entry: NewResourceEntry): TextEdit | undefined {
+  const { text } = index;
+  const nl = newline(text);
+  const key = SECTION_FOR_KIND[kind];
+  const section = index.sections.find((s) => s.key === key);
+  if (section?.flow) return undefined;
+  if (section && !section.empty) {
+    const at = insertPointAtLineEnd(text, section.end);
+    return { start: at, end: at, newText: nl + renderEntry(entry, section.dashIndent, nl) };
+  }
+  if (section && section.empty) {
+    const at = insertPointAtLineEnd(text, section.keyRange[1]);
+    // Replace whatever follows the key on its line (`: []`, `:`, a null).
+    return { start: section.keyRange[1], end: at, newText: `:${nl}${renderEntry(entry, section.dashIndent, nl)}` };
+  }
+  const trimmedEnd = text.replace(/\s+$/, '').length;
+  const prefix = trimmedEnd === 0 ? '' : nl + nl;
+  return { start: trimmedEnd, end: text.length, newText: `${prefix}${key}:${nl}${renderEntry(entry, 2, nl)}${nl}` };
+}
+
+/** Text of a new properties file holding one entry. */
+export function newPropertiesFile(kind: 'model' | 'seed' | 'snapshot', entry: NewResourceEntry): string {
+  return `version: 2\n\n${SECTION_FOR_KIND[kind]}:\n${renderEntry(entry, 2, '\n')}\n`;
+}
+
+/** Replace the contents of a `{% docs %}` block (offsets from parseDocBlocks), keeping its tags. */
+export function replaceDocBlockContents(
+  text: string,
+  block: { start: number; end: number; name: string },
+  contents: string,
+): TextEdit {
+  const original = text.slice(block.start, block.end);
+  const open = /^\{%-?\s*docs\s+\w+\s*-?%\}/.exec(original)?.[0] ?? `{% docs ${block.name} %}`;
+  const close = /\{%-?\s*enddocs\s*-?%\}$/.exec(original)?.[0] ?? '{% enddocs %}';
+  const nl = newline(text);
+  return { start: block.start, end: block.end, newText: `${open}${nl}${contents.trim().replace(/\r?\n/g, nl)}${nl}${close}` };
+}

@@ -31,6 +31,8 @@ export interface SqlAnalysis {
   relations: Map<string, RelationRef>;
   /** Lower-case output column -> select item. Only "simple" items (a bare column, optionally aliased). */
   selects: Map<string, SelectItem>;
+  /** Names of all output columns that could be read from the final select, in order (no `*`). */
+  outputs: string[];
 }
 
 const KEYWORDS = new Set([
@@ -58,7 +60,8 @@ function refFromMatch(m: RegExpExecArray | RegExpMatchArray, isSource: boolean):
 export function analyzeSql(rawSql: string | undefined): SqlAnalysis {
   const relations = new Map<string, RelationRef>();
   const selects = new Map<string, SelectItem>();
-  if (!rawSql) return { relations, selects };
+  const outputs: string[] = [];
+  if (!rawSql) return { relations, selects, outputs };
   const sql = stripComments(rawSql);
 
   // Import CTEs: `name as ( select * from {{ ref('x') }} )`
@@ -97,6 +100,8 @@ export function analyzeSql(rawSql: string | undefined): SqlAnalysis {
   const lastSelect = finalSelectList(sql);
   if (lastSelect) {
     for (const part of splitTopLevel(lastSelect)) {
+      const outName = /\s+as\s+("?)(\w+)\1\s*$/i.exec(part)?.[2] ?? /^\s*(?:distinct\s+)?(?:\w+\.)?(\w+)\s*$/i.exec(part)?.[1];
+      if (outName && !KEYWORDS.has(outName.toLowerCase())) outputs.push(outName);
       const m = /^\s*(?:distinct\s+)?(?:(\w+)\.)?(\w+)(?:\s+(?:as\s+)?(\w+))?\s*$/i.exec(part);
       if (!m) {
         const expr = expressionItem(part);
@@ -109,7 +114,7 @@ export function analyzeSql(rawSql: string | undefined): SqlAnalysis {
       selects.set(output.toLowerCase(), { output, column, qualifier });
     }
   }
-  return { relations, selects };
+  return { relations, selects, outputs };
 }
 
 /** Bodies of CTEs: lower-case name -> text inside the parentheses. */

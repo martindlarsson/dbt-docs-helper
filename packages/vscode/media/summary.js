@@ -1,14 +1,24 @@
 // @ts-check
-// Renders the "Model" view from the data posted by src/modelSummary.ts.
-// Uses DOM APIs only (textContent), so descriptions cannot inject markup.
+// The documentation editor (src/docEditor.ts renders the data, this script the page).
+// - DOM APIs only (textContent), so descriptions cannot inject markup.
+// - Text fields save on blur, Ctrl/Cmd+Enter, or when the panel loses focus. Escape reverts.
+// - A re-render (after a save, or when the manifest changes) keeps unsaved text, focus and cursor.
 (function () {
   // eslint-disable-next-line no-undef
   const vscode = acquireVsCodeApi();
   const app = /** @type {HTMLElement} */ (document.getElementById('app'));
+  const isPanel = document.body.classList.contains('host-panel');
   const saved = vscode.getState() || {};
   let filter = saved.filter || 'all';
   /** @type {any} */
   let last;
+  /** @type {string|undefined} */
+  let modelId;
+  let status = '';
+  /** @type {ReturnType<typeof setTimeout>|undefined} */
+  let statusTimer;
+  /** True while the page is rebuilt: removing a focused field fires "blur", which must not save. */
+  let rendering = false;
 
   /**
    * @param {string} tag
@@ -19,9 +29,10 @@
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
       if (v === undefined || v === null || v === false) continue;
-      if (k === 'onclick') el.addEventListener('click', v);
-      else if (k === 'onkeydown') el.addEventListener('keydown', v);
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
       else if (k === 'class') el.className = v;
+      else if (k === 'width') el.style.width = v; // CSSOM: allowed by the content security policy
+      else if (k === 'value') /** @type {HTMLTextAreaElement} */ (el).value = v;
       else el.setAttribute(k, String(v));
     }
     for (const c of children || []) {
@@ -39,12 +50,108 @@
   function button(label, title, fn, cls) {
     return h('button', { class: cls || 'secondary', title, onclick: (/** @type {Event} */ e) => { e.stopPropagation(); fn(); } }, [label]);
   }
+  /** @param {string} label @param {string} title @param {() => void} fn */
+  function link(label, title, fn) {
+    return h('a', { href: '#', title, onclick: (/** @type {Event} */ e) => { e.preventDefault(); e.stopPropagation(); fn(); } }, [label]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Editable text fields
+
+  /**
+   * A text field bound to a save message.
+   * @param {string} key unique key, used to keep drafts across re-renders
+   * @param {string} value the saved value
+   * @param {string} placeholder
+   * @param {(value: string) => any} message builds the save message
+   * @param {string} label accessible label
+   */
+  function field(key, value, placeholder, message, label) {
+    const ta = /** @type {HTMLTextAreaElement} */ (
+      h('textarea', {
+        rows: 1,
+        placeholder,
+        'aria-label': label,
+        'data-key': key,
+        'data-original': value,
+        spellcheck: 'true',
+        value,
+        oninput: () => grow(ta),
+        onblur: () => commit(ta),
+        onkeydown: (/** @type {KeyboardEvent} */ e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            commit(ta);
+          } else if (e.key === 'Enter' && !e.shiftKey && !ta.value.includes('\n')) {
+            // Single-line text: Enter saves and moves on. Shift+Enter adds a line.
+            e.preventDefault();
+            commit(ta);
+            focusNext(ta);
+          } else if (e.key === 'Escape') {
+            ta.value = ta.getAttribute('data-original') || '';
+            grow(ta);
+            ta.blur();
+          }
+        },
+      })
+    );
+    /** @type {any} */ (ta).saveMessage = message;
+    return ta;
+  }
+
+  /** @param {HTMLTextAreaElement} ta */
+  function grow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight + 2}px`;
+  }
+
+  /** @param {HTMLTextAreaElement} ta */
+  function commit(ta) {
+    if (rendering) return;
+    const original = ta.getAttribute('data-original') || '';
+    if (ta.value.trim() === original.trim()) return;
+    ta.setAttribute('data-original', ta.value);
+    ta.classList.add('saving');
+    setStatus('Saving\u2026');
+    post(/** @type {any} */ (ta).saveMessage(ta.value));
+  }
+
+  /** @param {HTMLTextAreaElement} ta */
+  function focusNext(ta) {
+    const all = /** @type {HTMLTextAreaElement[]} */ ([...document.querySelectorAll('textarea')]);
+    const next = all[all.indexOf(ta) + 1];
+    if (next) next.focus();
+  }
+
+  function commitAll() {
+    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) commit(ta);
+  }
+
+  /** @param {string} text */
+  function setStatus(text) {
+    status = text;
+    const el = document.getElementById('status');
+    if (el) el.textContent = text;
+    if (statusTimer) clearTimeout(statusTimer);
+    if (text && text !== 'Saving\u2026') statusTimer = setTimeout(() => setStatus(''), 4000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sections
 
   const STATUS = {
     documented: { label: 'Documented', cls: 'documented' },
     inheritable: { label: 'Can be inherited', cls: 'inheritable' },
     missing: { label: 'Missing', cls: 'missing' },
   };
+  const SOURCE = {
+    manifest: 'not in YAML',
+    catalog: 'in the warehouse, not in YAML',
+    sql: 'from the SQL, not in YAML',
+  };
+
+  /** @param {string} f */
+  const fileName = (f) => f.split('/').pop() || f;
 
   /** @param {any} s */
   function header(s) {
@@ -53,37 +160,30 @@
       h('div', { class: 'title-row' }, [
         h('h1', { title: s.uniqueId }, [s.label]),
         h('span', { class: 'chips' }, meta.map((m) => h('span', { class: 'chip' }, [m]))),
+        h('span', { id: 'status', class: 'status', role: 'status', 'aria-live': 'polite' }, [status]),
       ]),
       h('div', { class: 'file-links' }, [
-        s.locations.source && h('a', { href: '#', onclick: () => open(s.locations.source), title: s.locations.source.file }, [fileName(s.locations.source.file)]),
-        s.locations.yaml && h('a', { href: '#', onclick: () => open(s.locations.yaml), title: s.locations.yaml.file }, [fileName(s.locations.yaml.file)]),
+        s.locations.source && link(fileName(s.locations.source.file), s.locations.source.file, () => open(s.locations.source)),
+        s.locations.yaml
+          ? link(fileName(s.locations.yaml.file), s.locations.yaml.file, () => open(s.locations.yaml))
+          : h('span', { class: 'muted' }, ['no YAML yet: it is created when you write']),
+        !isPanel && link('Open beside editor', 'Open this editor in a tab next to the SQL file', () => post({ type: 'openPanel' })),
       ]),
       s.tags.length || s.owner
-        ? h('div', { class: 'muted small' }, [
-            s.owner ? `Owner: ${s.owner}` : '',
-            s.owner && s.tags.length ? ' · ' : '',
-            s.tags.length ? `Tags: ${s.tags.join(', ')}` : '',
-          ])
+        ? h('div', { class: 'muted small' }, [s.owner ? `Owner: ${s.owner}` : '', s.owner && s.tags.length ? ' \u00b7 ' : '', s.tags.length ? `Tags: ${s.tags.join(', ')}` : ''])
         : null,
     ]);
   }
 
-  /** @param {string} f */
-  function fileName(f) {
-    return f.split('/').pop() || f;
-  }
-
   /** @param {any} s */
-  function description(s) {
-    const has = s.description && s.description.trim().length > 0;
+  function modelDescription(s) {
+    const editable = s.kind !== 'source' || !!s.locations.yaml;
     return h('section', { class: 'model-description' }, [
-      has
-        ? h('p', {}, [s.description])
-        : h('p', { class: 'warning' }, [s.locations.yaml ? 'This model has no description.' : 'This model has no YAML entry yet.']),
-      h('div', { class: 'actions' }, [
-        s.docBlock && h('span', { class: 'chip', title: 'Doc block' }, [`{{ doc('${s.docBlock}') }}`]),
-        s.locations.yaml && button(has ? 'Edit description' : 'Write description', 'Edit the model description', () => post({ type: 'action', action: 'editModel' })),
-      ]),
+      h('h2', {}, ['Description']),
+      editable
+        ? field(`model:${s.uniqueId}`, s.rawDescription || '', `Describe ${s.label}\u2026`, (value) => ({ type: 'save', target: 'model', value }), `Description of ${s.label}`)
+        : h('p', {}, [s.description]),
+      s.docBlock && h('p', { class: 'muted small' }, [`Uses doc block ${s.docBlock}: `, s.description]),
     ]);
   }
 
@@ -92,63 +192,81 @@
     const c = s.counts;
     const total = Math.max(1, c.columns);
     const pct = (/** @type {number} */ n) => `${(100 * n) / total}%`;
-    const safe = s.columns.filter((/** @type {any} */ col) => col.inherit && col.inherit.safe).length;
+    const safe = s.columns.filter((/** @type {any} */ col) => col.inherit && col.inherit.safe && col.source === 'yaml').length;
+    const catalogOnly = s.columns.filter((/** @type {any} */ col) => col.source === 'catalog').length;
     return h('section', { class: 'coverage' }, [
       h('div', { class: 'bar', role: 'img', 'aria-label': `${c.documented} documented, ${c.inheritable} inheritable, ${c.missing} missing` }, [
-        h('span', { class: 'documented', style: `width:${pct(c.documented)}` }),
-        h('span', { class: 'inheritable', style: `width:${pct(c.inheritable)}` }),
-        h('span', { class: 'missing', style: `width:${pct(c.missing)}` }),
+        h('span', { class: 'documented', width: pct(c.documented) }),
+        h('span', { class: 'inheritable', width: pct(c.inheritable) }),
+        h('span', { class: 'missing', width: pct(c.missing) }),
       ]),
       h('div', { class: 'legend' }, [
         h('span', {}, [h('i', { class: 'dot documented' }), ` ${c.documented} documented`]),
-        h('span', {}, [h('i', { class: 'dot inheritable' }), ` ${c.inheritable} inheritable`]),
+        h('span', {}, [h('i', { class: 'dot inheritable' }), ` ${c.inheritable} can inherit`]),
         h('span', {}, [h('i', { class: 'dot missing' }), ` ${c.missing} missing`]),
       ]),
-      safe > 0 || c.notInYaml > 0
+      safe > 0 || (catalogOnly > 0 && s.locations.yaml)
         ? h('div', { class: 'actions' }, [
             safe > 0 && button(`Inherit ${safe} safe`, 'Write all descriptions that are passed through unchanged from a single upstream column', () => post({ type: 'action', action: 'inheritAll' }), 'primary'),
-            c.notInYaml > 0 && s.locations.yaml && button(`Add ${c.notInYaml} missing column${c.notInYaml === 1 ? '' : 's'}`, 'Columns in the warehouse (catalog.json) that are not in YAML', () => post({ type: 'action', action: 'addColumns' })),
+            catalogOnly > 0 && s.locations.yaml && button(`Add ${catalogOnly} column${catalogOnly === 1 ? '' : 's'} to YAML`, 'Columns in the warehouse (catalog.json) that are not in YAML', () => post({ type: 'action', action: 'addColumns' })),
           ])
         : null,
     ]);
   }
 
-  /** @param {any} col @param {boolean} ai */
-  function columnRow(col, ai) {
+  /** @param {any} col @param {any} s @param {boolean} ai */
+  function columnRow(col, s, ai) {
     const st = STATUS[/** @type {'documented'|'inheritable'|'missing'} */ (col.status)];
-    const acts = [];
-    if (!col.notInYaml) {
-      if (col.inherit) acts.push(button('Inherit', `Write ${col.inherit.docBlock ? `{{ doc('${col.inherit.docBlock}') }}` : 'the text'} from ${col.inherit.from}.${col.inherit.fromColumn}`, () => action('inherit', col.name), col.inherit.safe ? 'primary' : 'secondary'));
-      acts.push(button('Edit', 'Write or change the description', () => action('edit', col.name)));
-      if (col.status === 'documented' && !col.docBlock) acts.push(button('To doc block', 'Move the description to a doc block and link it', () => action('move', col.name)));
-      if (!col.docBlock) acts.push(button('Link…', 'Link to an existing doc block', () => action('link', col.name)));
-      if (ai && col.status !== 'documented') acts.push(button('AI', 'Suggest a description with AI', () => action('ai', col.name)));
+    const inYaml = col.source === 'yaml';
+    const editable = s.kind !== 'source' || inYaml;
+    const save = (/** @type {string} */ value) => ({ type: 'save', target: 'column', column: col.name, value });
+
+    let input;
+    if (col.docBlock && inYaml) {
+      // Edit the shared block's text; it changes every column that uses it.
+      input = field(`block:${col.docBlock}:${col.name}`, col.description || '', 'Text of the doc block\u2026', (value) => ({ type: 'saveBlock', block: col.docBlock, value }), `Doc block ${col.docBlock}`);
+    } else if (editable) {
+      const placeholder = col.inherit ? `\u21b3 ${col.inherit.from}: ${col.inherit.description}` : `Describe ${col.name}\u2026`;
+      input = field(`col:${col.name}`, col.rawDescription || '', placeholder, save, `Description of ${col.name}`);
+    } else {
+      input = h('p', { class: 'muted' }, [col.description || 'No description.']);
     }
-    let text;
-    if (col.notInYaml) text = h('p', { class: 'muted' }, ['In the warehouse, not in YAML.']);
-    else if (col.status === 'documented') text = h('p', {}, [col.description]);
-    else if (col.inherit)
-      text = h('p', { class: 'inherited' }, [
-        h('span', { class: 'from' }, [`↳ ${col.inherit.from}${col.inherit.fromColumn !== col.name ? `.${col.inherit.fromColumn}` : ''}`, col.inherit.kind !== 'passthrough' ? ` (${col.inherit.kind})` : '', ': ']),
-        col.inherit.description,
-        col.moreCandidates > 0 ? h('span', { class: 'muted' }, [` +${col.moreCandidates} more`]) : null,
-      ]);
-    else text = h('p', { class: 'muted' }, ['No description, and nothing to inherit.']);
-    return h('li', {
-      class: `column ${st.cls}`,
-      title: st.label,
-      tabindex: 0,
-      onclick: () => open(col.location),
-      onkeydown: (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter' && e.target === e.currentTarget) open(col.location); },
-    }, [
+
+    const extras = [];
+    if (col.docBlock && inYaml) {
+      extras.push(
+        h('span', { class: 'muted small' }, [`Doc block ${col.docBlock}`, col.docBlockUsages > 1 ? ` \u00b7 used by ${col.docBlockUsages} columns, edits change all of them` : '']),
+        link('Unlink', 'Copy the text into this column so it can be changed here only', () => action('unlink', col.name)),
+      );
+    }
+    if (col.status !== 'documented' && col.inherit && editable) {
+      extras.push(
+        button(
+          `Use \u21b3 ${col.inherit.from}${col.inherit.fromColumn !== col.name ? `.${col.inherit.fromColumn}` : ''}`,
+          `${col.inherit.docBlock ? `Link to the same doc block (${col.inherit.docBlock})` : `Copy: ${col.inherit.description}`}${col.inherit.kind !== 'passthrough' ? ` \u2014 the column is ${col.inherit.kind}, check that the text fits` : ''}`,
+          () => (inYaml ? action('inherit', col.name) : post(save(col.inherit.docBlock ? `{{ doc('${col.inherit.docBlock}') }}` : col.inherit.description))),
+          col.inherit.safe ? 'primary' : 'secondary',
+        ),
+      );
+      if (col.inherit.kind !== 'passthrough') extras.push(h('span', { class: 'muted small' }, [col.inherit.kind]));
+    }
+    if (ai && col.status !== 'documented' && inYaml) extras.push(button('AI', 'Suggest a description with AI', () => action('ai', col.name)));
+    if (inYaml && !col.docBlock) {
+      extras.push(link('Link to doc block\u2026', 'Use an existing doc block', () => action('link', col.name)));
+      if (col.status === 'documented') extras.push(link('Move to doc block\u2026', 'Move the text to a doc block that other models can use', () => action('move', col.name)));
+    }
+
+    return h('li', { class: `column ${st.cls}` }, [
       h('div', { class: 'col-head' }, [
-        h('i', { class: `dot ${col.notInYaml ? 'notinyaml' : st.cls}`, title: col.notInYaml ? 'Not in YAML' : st.label }),
-        h('span', { class: 'col-name' }, [col.name]),
-        col.dataType && h('span', { class: 'muted small type' }, [col.dataType.toLowerCase()]),
-        col.docBlock && h('span', { class: 'chip small', title: `{{ doc('${col.docBlock}') }}` }, ['doc block']),
+        h('i', { class: `dot ${inYaml ? st.cls : 'notinyaml'}`, title: inYaml ? st.label : SOURCE[/** @type {'manifest'} */ (col.source)] }),
+        col.location
+          ? link(col.name, 'Show in YAML', () => open(col.location))
+          : h('span', { class: 'col-name' }, [col.name]),
+        col.dataType && h('span', { class: 'type' }, [col.dataType.toLowerCase()]),
+        !inYaml && h('span', { class: 'muted small' }, [SOURCE[/** @type {'manifest'} */ (col.source)]]),
       ]),
-      text,
-      acts.length ? h('div', { class: 'actions row-actions' }, acts) : null,
+      input,
+      extras.length ? h('div', { class: 'actions row-actions' }, extras) : null,
     ]);
   }
 
@@ -159,49 +277,107 @@
     const tab = (/** @type {string} */ id, /** @type {string} */ label) =>
       h('button', { class: `tab ${filter === id ? 'active' : ''}`, 'aria-pressed': filter === id, onclick: () => { filter = id; vscode.setState({ filter }); render(last); } }, [label]);
     return h('section', {}, [
-      h('div', { class: 'section-head' }, [h('h2', {}, ['Columns']), h('span', { class: 'tabs' }, [tab('all', `All ${s.columns.length}`), tab('needs', `Needs work ${needs.length}`)])]),
+      h('div', { class: 'section-head' }, [h('h2', {}, ['Columns']), h('span', { class: 'tabs' }, [tab('all', `All ${s.columns.length}`), tab('needs', `To do ${needs.length}`)])]),
       shown.length === 0
-        ? h('p', { class: 'muted' }, [s.columns.length === 0 ? 'No columns in YAML or catalog.json.' : 'Every column is documented.'])
-        : h('ul', { class: 'columns' }, shown.map((/** @type {any} */ c) => columnRow(c, ai))),
+        ? h('p', { class: 'muted' }, [s.columns.length === 0 ? 'No columns found in YAML, catalog.json or the SQL.' : 'Every column is documented.'])
+        : h('ul', { class: 'columns' }, shown.map((/** @type {any} */ c) => columnRow(c, s, ai))),
     ]);
   }
 
   /** @param {string} title @param {any[]} items */
   function relations(title, items) {
-    return h('section', {}, [
+    return h('section', { class: 'relations-section' }, [
       h('h2', {}, [`${title} (${items.length})`]),
       items.length === 0
         ? h('p', { class: 'muted' }, ['None'])
         : h('ul', { class: 'relations' }, items.map((r) =>
-            h('li', { onclick: () => open(r.location), title: r.uniqueId, class: r.location ? 'clickable' : '' }, [
+            h('li', {}, [
               h('span', { class: 'chip small' }, [r.kind]),
-              ` ${r.label}`,
+              r.location ? link(r.label, r.uniqueId, () => open(r.location)) : h('span', {}, [r.label]),
               r.coverage !== undefined ? h('span', { class: 'muted small right' }, [`${r.coverage}%`]) : null,
             ]),
           )),
     ]);
   }
 
+  // ---------------------------------------------------------------------------
+  // Rendering that keeps what the user is typing
+
+  function snapshot() {
+    const fields = new Map();
+    const active = /** @type {HTMLElement|null} */ (document.activeElement);
+    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) {
+      fields.set(ta.getAttribute('data-key'), {
+        value: ta.value,
+        original: ta.getAttribute('data-original') || '',
+        focused: ta === active,
+        start: ta.selectionStart,
+        end: ta.selectionEnd,
+      });
+    }
+    return { fields, scroll: window.scrollY };
+  }
+
+  /** @param {ReturnType<typeof snapshot>} snap */
+  function restore(snap) {
+    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) {
+      const old = snap.fields.get(ta.getAttribute('data-key'));
+      if (old) {
+        const dirty = old.value !== old.original;
+        if (dirty && old.value !== ta.value) ta.value = old.value;
+        if (old.focused) {
+          ta.focus();
+          ta.setSelectionRange(old.start, old.end);
+        }
+      }
+      grow(ta);
+    }
+    window.scrollTo(0, snap.scroll);
+  }
+
   /** @param {any} m */
   function render(m) {
+    const sameModel = m && m.type === 'summary' && m.summary.uniqueId === modelId;
+    if (!sameModel) commitAll(); // switching model: save what was typed for the previous one
+    const snap = sameModel ? snapshot() : undefined;
+    rendering = true;
+    try {
+      draw(m);
+      if (snap) restore(snap);
+      else for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) grow(ta);
+    } finally {
+      rendering = false;
+    }
+  }
+
+  /** @param {any} m */
+  function draw(m) {
     last = m;
+    modelId = m && m.type === 'summary' ? m.summary.uniqueId : undefined;
     app.replaceChildren();
     if (!m || m.type === 'empty') {
-      app.append(h('p', { class: 'empty' }, [m ? m.message : 'Loading…']));
+      app.append(h('p', { class: 'empty' }, [m ? m.message : 'Loading\u2026']));
       return;
     }
     const s = m.summary;
     app.append(
-      m.stale ? h('p', { class: 'banner' }, ['manifest.json is out of date; lineage may be incomplete.']) : '',
+      m.stale ? h('p', { class: 'banner' }, ['manifest.json is out of date; new columns or lineage may be missing.']) : '',
       header(s),
-      description(s),
+      modelDescription(s),
       coverage(s),
       columns(s, m.aiEnabled),
-      relations('Upstream', s.upstream),
-      relations('Downstream', s.downstream),
+      h('div', { class: 'relations-grid' }, [relations('Upstream', s.upstream), relations('Downstream', s.downstream)]),
+      h('p', { class: 'muted small hint' }, ['Saved to YAML when you leave a field or press Enter. Shift+Enter: new line. Esc: undo.']),
     );
   }
 
-  window.addEventListener('message', (e) => render(e.data));
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (m.type === 'saved') setStatus(`Saved to ${fileName(m.file)}`);
+    else if (m.type === 'error') setStatus(`Not saved: ${m.message}`);
+    else render(m);
+  });
+  window.addEventListener('blur', commitAll);
+  window.addEventListener('resize', () => document.querySelectorAll('textarea').forEach((ta) => grow(/** @type {HTMLTextAreaElement} */ (ta))));
   post({ type: 'ready' });
 })();

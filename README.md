@@ -41,7 +41,8 @@ See [packages/vscode/README.md](packages/vscode/README.md) for the features. In 
 - **Quick fixes**: inherit, move to doc block and link both, link to an existing block,
   add missing columns (from `catalog.json`), inherit everything safe in the file, AI suggestion (opt-in).
 - **Problems panel** with configurable severity per rule.
-- **Side panel**: a summary of the open model, coverage per layer/folder/tag/owner/kind, work list, doc block candidates.
+- **Documentation editor**: a tab next to the SQL file where you write the model and column descriptions (with data types and inheritance) without opening the YAML.
+- **Side panel**: coverage per layer/folder/tag/owner/kind, work list, doc block candidates.
 - **Quiet stale-manifest handling**: documentation edits never need `dbt parse`; when SQL changes, a status bar icon (or one notification per session, or a silent background parse) instead of repeated pop-ups.
 
 ### Try it locally

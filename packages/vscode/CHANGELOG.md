@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- New **Model** view: a summary of the model open in the editor (SQL, Python, CSV or YAML), with
-  column status and types, inheritable descriptions, upstream/downstream models and one-click fixes.
+- New **documentation editor** ("Document this model"): an editor tab next to the SQL file where
+  you write the model and column descriptions without opening the YAML. Shows column data types,
+  what can be inherited, doc blocks (editable for all columns, or unlink), and upstream/downstream
+  models. Writes to YAML and saves; creates missing columns and YAML entries. Also in the side bar.
 - New commands to write or edit a column or model description in an input box.
 - Stale manifest warnings no longer nag: documentation edits never count, a background tool that
   updates the manifest (e.g. the dbt extension with Fusion) is detected, and there is at most one

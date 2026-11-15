@@ -148,6 +148,11 @@ export enum ConfigurationTarget {
   Workspace = 2,
   WorkspaceFolder = 3,
 }
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+}
 export enum ProgressLocation {
   Notification = 15,
 }
@@ -163,6 +168,15 @@ export class TextDocument {
   constructor(readonly uri: Uri, private text: string) {}
   getText(): string {
     return this.text;
+  }
+  /** Write to disk, like saving in the editor. */
+  async save(): Promise<boolean> {
+    fs.mkdirSync(path.dirname(this.uri.fsPath), { recursive: true });
+    fs.writeFileSync(this.uri.fsPath, this.text);
+    this.isDirty = false;
+    __state.saved.push(this.uri.fsPath);
+    __state.docEvents.save.fire(this);
+    return true;
   }
   setText(t: string): void {
     this.text = t;
@@ -216,6 +230,8 @@ export const __state = {
   codeActionProviders: [] as any[],
   treeProviders: new Map<string, any>(),
   webviewProviders: new Map<string, any>(),
+  panels: [] as any[],
+  saved: [] as string[],
   editorEvents: { active: new EventEmitter<any>(), selection: new EventEmitter<any>() },
   diagnostics: new Map<string, Diagnostic[]>(),
   config: new Map<string, unknown>(),
@@ -247,6 +263,8 @@ export function __reset(root: string): void {
   __state.codeActionProviders = [];
   __state.treeProviders.clear();
   __state.webviewProviders.clear();
+  __state.panels = [];
+  __state.saved = [];
   __state.editorEvents = { active: new EventEmitter<any>(), selection: new EventEmitter<any>() };
   window.activeTextEditor = undefined;
   __state.diagnostics.clear();
@@ -359,6 +377,22 @@ export const window = {
   },
   onDidChangeActiveTextEditor: (l: Listener<any>) => __state.editorEvents.active.event(l),
   onDidChangeTextEditorSelection: (l: Listener<any>) => __state.editorEvents.selection.event(l),
+  createWebviewPanel(viewType: string, title: string) {
+    const view = __webviewView();
+    const disposed = new EventEmitter<void>();
+    const panel = {
+      viewType,
+      title,
+      iconPath: undefined as unknown,
+      ...view,
+      reveal() {},
+      onDidDispose: (l: Listener<void>) => disposed.event(l),
+      dispose: () => disposed.fire(),
+    };
+    __state.panels.push(panel);
+    return panel;
+  },
+  registerWebviewPanelSerializer: () => disposable,
   registerWebviewViewProvider(id: string, p: unknown) {
     __state.webviewProviders.set(id, p);
     return disposable;

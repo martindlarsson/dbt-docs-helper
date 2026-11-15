@@ -55,3 +55,37 @@ describe('modelSummary', () => {
     expect(seed.yamlFile).toBeUndefined();
   });
 });
+
+describe('modelSummary for editing', () => {
+  it('gives the raw YAML text and doc block usage', () => {
+    const project = DbtProject.load(ROOT);
+    const s = modelSummary(new Analysis(project), 'model.jaffle.stg_orders')!;
+    const orderId = s.columns.find((c) => c.name === 'order_id')!;
+    expect(orderId).toMatchObject({
+      rawDescription: "{{ doc('col_stg_orders__order_id') }}",
+      description: 'Unique identifier of an order.',
+      source: 'yaml',
+      docBlock: 'col_stg_orders__order_id',
+      docBlockFile: 'models/_docs/columns.md',
+      docBlockUsages: 2,
+    });
+    expect(s.rawDescription).toBe('One row per order');
+  });
+
+  it('lists columns from the SQL of a model without YAML or catalog', () => {
+    const project = DbtProject.load(ROOT);
+    // Drop the YAML entry and the catalog: only the SQL is left.
+    project.setFileText('models/marts/_marts.yml', 'version: 2\nmodels: []\n');
+    project.catalog = undefined;
+    project.manifest.resources.get('model.jaffle.orders')!.columns.clear();
+    const s = modelSummary(new Analysis(project), 'model.jaffle.orders')!;
+    expect(s.yamlFile).toBeUndefined();
+    expect(s.columns.map((c) => [c.name, c.source, c.status])).toEqual([
+      ['order_id', 'sql', 'inheritable'],
+      ['customer_id', 'sql', 'inheritable'],
+      ['order_date', 'sql', 'inheritable'],
+      ['status', 'sql', 'inheritable'],
+      ['amount', 'sql', 'inheritable'],
+    ]);
+  });
+});

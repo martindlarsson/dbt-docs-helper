@@ -131,6 +131,11 @@ export class Analysis {
     return a;
   }
 
+  /** Output column names that can be read from the model's SQL, in order. */
+  sqlOutputs(resource: Resource): string[] {
+    return this.sql(resource).outputs;
+  }
+
   // ---------------------------------------------------------------------------
   // Inheritance
 

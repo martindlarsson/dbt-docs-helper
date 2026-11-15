@@ -1,4 +1,5 @@
 import * as assert from 'node:assert';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
@@ -80,18 +81,20 @@ describe('dbt-docs-helper in VS Code', () => {
     assert.ok(text.includes('Lineage'), text);
   });
 
-  it('shows the model summary for the open SQL file', async () => {
-    const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as { modelSummary: { lastMessage?: any } };
-    await vscode.commands.executeCommand('dbt-docs-helper.showModelSummary');
-    const doc = await vscode.workspace.openTextDocument(path.join(root(), 'models/marts/orders.sql'));
+  it('documents a model in the editor tab and saves the YAML', async () => {
+    const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as {
+      docEditor: { lastMessage: Map<string, any>; onMessage(m: unknown): Promise<void> };
+    };
+    const doc = await vscode.workspace.openTextDocument(path.join(root(), 'models/staging/stg_payments.sql'));
     await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand('dbt-docs-helper.openDocEditor');
     const message = await waitFor(() => {
-      const m = api.modelSummary.lastMessage;
-      return m?.type === 'summary' && m.summary.label === 'orders' ? m : undefined;
+      const m = api.docEditor.lastMessage.get('panel');
+      return m?.type === 'summary' && m.summary.label === 'stg_payments' ? m : undefined;
     });
-    assert.deepStrictEqual(
-      message.summary.upstream.map((u: { label: string }) => u.label),
-      ['stg_orders', 'stg_payments'],
-    );
+    assert.ok(message.summary.columns.some((c: { name: string }) => c.name === 'payment_method'));
+    await api.docEditor.onMessage({ type: 'save', target: 'column', column: 'payment_method', value: 'How the customer paid' });
+    const yaml = path.join(root(), 'models/staging/_staging.yml');
+    await waitFor(() => fs.readFileSync(yaml, 'utf8').includes('description: How the customer paid') || undefined);
   });
 });

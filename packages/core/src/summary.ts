@@ -3,7 +3,7 @@
  * columns with status, and the resources up- and downstream. Plain data, so
  * that it can be sent to a webview or printed by the CLI.
  */
-import type { Analysis, ColumnStatus, InheritanceKind } from './analysis';
+import type { Analysis, ColumnStatus, InheritanceCandidate, InheritanceKind } from './analysis';
 import type { DbtProject } from './project';
 import { resourceLabel, Resource, ResourceKind } from './manifest';
 import { docRefName } from './yamlIndex';
@@ -18,8 +18,19 @@ export interface SummaryLocation {
 export interface SummaryColumn {
   name: string;
   status: ColumnStatus;
+  /** Rendered description (doc() expanded). */
   description: string;
+  /** Description as written in YAML (may be `{{ doc('x') }}`); what the user edits. */
+  rawDescription: string;
+  /**
+   * Where the column is known from: YAML, only the manifest (its YAML entry is gone), the
+   * warehouse (catalog.json) or the model SQL. Anything but `yaml` is added to YAML on edit.
+   */
+  source: 'yaml' | 'manifest' | 'catalog' | 'sql';
   docBlock?: string;
+  /** For a linked doc block: its file and how many columns use it. */
+  docBlockFile?: string;
+  docBlockUsages?: number;
   dataType?: string;
   notInYaml: boolean;
   /** Best upstream description when the column is not documented. */
@@ -44,6 +55,8 @@ export interface ModelSummary {
   kind: ResourceKind;
   /** Rendered model description (doc() expanded). */
   description: string;
+  /** Model description as written in YAML. */
+  rawDescription: string;
   docBlock?: string;
   /** Path of the SQL/CSV file (sources: the YAML file). */
   file: string;
@@ -91,21 +104,55 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
   const report = analysis.resources.get(uniqueId);
   const yaml = report?.yaml ?? project.yamlFor(resource);
 
+  const blockUsages = new Map<string, number>();
+  for (const r of analysis.resources.values()) {
+    for (const c of r.columns) if (c.docBlock) blockUsages.set(c.docBlock, (blockUsages.get(c.docBlock) ?? 0) + 1);
+  }
+  const blocks = project.docBlocks();
+  const inheritOf = (candidates: InheritanceCandidate[]): SummaryColumn['inherit'] => {
+    const k = candidates[0];
+    if (!k) return undefined;
+    const safe = candidates.length === 1 && k.kind === 'passthrough' && k.via === 'sql';
+    return { from: k.fromLabel, fromColumn: k.fromColumn, description: k.description, kind: k.kind, docBlock: k.docBlock, safe };
+  };
+
   const columns: SummaryColumn[] = (report?.columns ?? []).map((c) => {
-    const k = c.candidates[0];
-    const safe = !!k && c.candidates.length === 1 && k.kind === 'passthrough' && k.via === 'sql';
     return {
       name: c.name,
       status: c.status,
       description: c.description,
+      rawDescription: c.rawDescription,
+      source: c.yaml ? 'yaml' : c.notInYaml ? 'catalog' : 'manifest',
       docBlock: c.docBlock,
+      docBlockFile: c.docBlock ? blocks.get(c.docBlock)?.file : undefined,
+      docBlockUsages: c.docBlock ? blockUsages.get(c.docBlock) ?? 1 : undefined,
       dataType: resource.columns.get(c.name.toLowerCase())?.dataType ?? project.catalog?.get(uniqueId)?.find((x) => x.name.toLowerCase() === c.name.toLowerCase())?.type,
-      notInYaml: c.notInYaml,
-      inherit: k ? { from: k.fromLabel, fromColumn: k.fromColumn, description: k.description, kind: k.kind, docBlock: k.docBlock, safe } : undefined,
+      notInYaml: !c.yaml,
+      inherit: inheritOf(c.candidates),
       moreCandidates: Math.max(0, c.candidates.length - 1),
       location: c.yaml ? { file: c.yaml.file, offset: c.yaml.column.nameRange[0] } : undefined,
     };
   });
+
+  // Columns that are only in the SQL (e.g. a new model that has not been built yet).
+  if (resource.kind === 'model' || resource.kind === 'snapshot') {
+    const known = new Set(columns.map((c) => c.name.toLowerCase()));
+    for (const name of analysis.sqlOutputs(resource)) {
+      if (known.has(name.toLowerCase())) continue;
+      known.add(name.toLowerCase());
+      const candidates = analysis.findInheritance(resource, name);
+      columns.push({
+        name,
+        status: candidates.length > 0 ? 'inheritable' : 'missing',
+        description: '',
+        rawDescription: '',
+        source: 'sql',
+        notInYaml: true,
+        inherit: inheritOf(candidates),
+        moreCandidates: Math.max(0, candidates.length - 1),
+      });
+    }
+  }
 
   const relation = (id: string): SummaryRelation => {
     const r = project.manifest.resources.get(id);
@@ -132,6 +179,7 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
     label: resourceLabel(resource),
     kind: resource.kind,
     description,
+    rawDescription: rawDescription ?? (yaml ? '' : resource.description),
     docBlock: docRefName(rawDescription),
     file: resource.originalFilePath,
     yamlFile: yaml?.file,
