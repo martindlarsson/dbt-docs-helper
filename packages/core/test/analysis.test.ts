@@ -87,16 +87,50 @@ describe('analysis of the jaffle fixture', () => {
     expect(list.slice(0, firstInheritable).every((i) => i.column.status === 'missing')).toBe(true);
   });
 
-  it('suggests docs-block candidates', () => {
+  it('suggests docs-block candidates with shared names', () => {
     const cands = docsBlockCandidates(analysis, { minModels: 3 });
     const orderId = cands.find((c) => c.column === 'order_id')!;
     expect(orderId.sameText).toBe(true);
+    // an existing block is reused
     expect(orderId.suggestedName).toBe('col_stg_orders__order_id');
     const customerId = cands.find((c) => c.column === 'customer_id')!;
     expect(customerId.sameText).toBe(false);
-    expect(customerId.suggestedName).toBe('col_stg_customers__customer_id');
-    const first = cands.find((c) => c.column === 'first_name')!;
-    expect(first.suggestedName).toBe('col_crm_customers__first_name');
+    expect(customerId.suggestedName).toBe('col_customer_id');
+    expect(cands.find((c) => c.column === 'first_name')!.suggestedName).toBe('col_first_name');
+    expect(docsBlockCandidates(analysis, { sharedNamePattern: 'shared_{column}' }).find((c) => c.column === 'first_name')!.suggestedName).toBe(
+      'shared_first_name',
+    );
+  });
+
+  it('ignores columns that are only in catalog.json', () => {
+    const lastName = docsBlockCandidates(analysis, { minModels: 1 }).find((c) => c.column === 'last_name')!;
+    expect(lastName.usages.map((u) => u.label)).not.toContain('raw_customers');
+    expect(workList(analysis).some((i) => i.column.notInYaml)).toBe(false);
+    expect(workList(analysis, true).some((i) => i.column.notInYaml)).toBe(true);
+  });
+
+  it('drops a candidate once its usages are linked', () => {
+    const p = DbtProject.load(ROOT);
+    const link = (file: string, from: string, to: string) => {
+      const text = p.yamlFiles.get(file)!.text;
+      expect(text).toContain(from);
+      p.setFileText(file, text.replace(from, to));
+    };
+    const ref = `\n        description: "{{ doc('col_first_name') }}"`;
+    p.setFileText('models/_docs/columns.md', `{% docs col_first_name %}\nCustomer first name\n{% enddocs %}\n`);
+    link('models/staging/_sources.yml', 'name: first_name\n            description: Customer first name', `name: first_name\n            description: "{{ doc('col_first_name') }}"`);
+    link('models/staging/_staging.yml', '      - name: first_name', `      - name: first_name${ref}`);
+    expect(docsBlockCandidates(new Analysis(p), { minModels: 3 }).some((c) => c.column === 'first_name')).toBe(true);
+    link('models/marts/_marts.yml', '      - name: first_name', `      - name: first_name${ref}`);
+    expect(docsBlockCandidates(new Analysis(p), { minModels: 3 }).some((c) => c.column === 'first_name')).toBe(false);
+  });
+
+  it('keeps a deliberately different text as done', () => {
+    const p = DbtProject.load(ROOT);
+    // order_id: three usages link to the block; nothing else left -> not a candidate
+    const a = new Analysis(p);
+    const order = docsBlockCandidates(a, { minModels: 3 }).find((c) => c.column === 'order_id');
+    expect(order?.usages.filter((u) => !u.column.docBlock).map((u) => u.label)).toEqual(['orders']);
   });
 
   it('finds conflicting descriptions', () => {

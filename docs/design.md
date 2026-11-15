@@ -60,7 +60,17 @@ persistent in YAML.
 - When extracting: a quick pick with existing `.md` files in `docs-paths`/`model-paths`, or "New file…".
 
 ### Naming convention
-`col_{model}__{column}`, e.g. `col_stg_customers__customer_id`.
+There are two patterns, depending on how the block is created:
+
+- **Shared blocks** (from *Doc block candidates*, a column used in many models):
+  `col_{column}`, e.g. `col_customer_id`. The text lives in a global file and is meant for every
+  model that uses the column, so the name should not point at one model.
+  Setting: `dbt-docs-helper.docsBlocks.sharedNamePattern`. If a block with that name already exists
+  with a different text, the user is asked for another name.
+- **Blocks moved from one column** ("Move to doc block"): `col_{model}__{column}`, e.g.
+  `col_stg_customers__customer_id`, as described below.
+
+Rules for `col_{model}__{column}`:
 
 - `col_` shows that it is a column description (as opposed to, for example, model descriptions).
 - The model name is the model where the column **originates**, not every model that uses it.
@@ -115,6 +125,11 @@ packages/
 - **YAML changes** are made as minimal text edits (insert/replace), not by re-serialising the
   document. Comments, quoting, CRLF and ordering are preserved.
 - **Performance**: 500 models × 25 columns are analysed in under 0.1 s.
+- **Doc block candidates** only count columns that are in YAML (catalog-only columns cannot be
+  linked). A candidate is done when at least one usage links to a doc block and every other usage
+  has its own, different text (a different meaning, kept on purpose).
+- **Columns only in `catalog.json`** are shown in their own "Not in YAML" section of the work
+  list, per model, with a button to add them to YAML.
 
 ### Remaining work
 - Fusion's own column lineage (step 3).

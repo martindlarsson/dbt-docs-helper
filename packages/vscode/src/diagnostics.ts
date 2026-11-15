@@ -53,7 +53,7 @@ export class Diagnostics implements vscode.Disposable {
       version: project.version,
       conflicts: new Map(conflicts(analysis).map((c) => [c.column, c])),
       candidates: new Map(
-        docsBlockCandidates(analysis, { minModels: settings.minModels(scope), namePattern: settings.namePattern(scope) }).map((c) => [c.column, c]),
+        docsBlockCandidates(analysis, { minModels: settings.minModels(scope), sharedNamePattern: settings.sharedNamePattern(scope) }).map((c) => [c.column, c]),
       ),
       orphans,
     };

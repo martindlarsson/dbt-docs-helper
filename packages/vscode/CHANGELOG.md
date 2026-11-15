@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Doc block candidates get a global name, `col_{column}` (setting `docsBlocks.sharedNamePattern`).
+- A candidate disappears once you have linked its columns to a doc block.
+- Columns that are only in `catalog.json` are no longer listed as candidates or as "Write by hand";
+  they have their own "Not in YAML" section in the work list, with a button to add them to YAML.
+- Clicking a column that is not in YAML opens the model's YAML entry, or its SQL/CSV file.
+
 ## 0.1.0
 
 First version.

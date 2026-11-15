@@ -43,6 +43,8 @@ export function docBlockAppendText(existingText: string, name: string, contents:
 }
 
 export const DEFAULT_NAME_PATTERN = 'col_{model}__{column}';
+/** For blocks shared by many models, where the model is not part of the meaning. */
+export const DEFAULT_SHARED_NAME_PATTERN = 'col_{column}';
 
 /** Make a string safe to use as (part of) a doc block name. */
 export function sanitizeName(s: string): string {

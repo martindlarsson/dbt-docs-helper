@@ -115,7 +115,7 @@ export interface MissingOptions extends CommonOptions {
 }
 
 export function missingCommand(analysis: Analysis, opts: MissingOptions): Result {
-  let items = workList(analysis);
+  let items = workList(analysis, true);
   if (opts.onlyMissing) items = items.filter((i) => i.column.status === 'missing');
   if (opts.limit !== undefined) items = items.slice(0, opts.limit);
   if (opts.format === 'json') {
@@ -156,11 +156,11 @@ export function missingCommand(analysis: Analysis, opts: MissingOptions): Result
 
 export interface CandidatesOptions extends CommonOptions {
   minModels: number;
-  namePattern?: string;
+  sharedNamePattern?: string;
 }
 
 export function candidatesCommand(analysis: Analysis, opts: CandidatesOptions): Result {
-  const list = docsBlockCandidates(analysis, { minModels: opts.minModels, namePattern: opts.namePattern });
+  const list = docsBlockCandidates(analysis, { minModels: opts.minModels, sharedNamePattern: opts.sharedNamePattern });
   if (opts.format === 'json') {
     return {
       output: JSON.stringify(

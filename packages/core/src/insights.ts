@@ -3,7 +3,7 @@
  * docs-block candidates, conflicting descriptions and orphaned doc blocks.
  */
 import type { Analysis, ColumnReport, ResourceReport } from './analysis';
-import { DEFAULT_NAME_PATTERN, docBlockName, modelPartOfBlockName } from './docsBlocks';
+import { DEFAULT_NAME_PATTERN, DEFAULT_SHARED_NAME_PATTERN, docBlockName, modelPartOfBlockName } from './docsBlocks';
 import type { ResourceKind } from './manifest';
 
 // -----------------------------------------------------------------------------
@@ -96,11 +96,18 @@ export interface WorkItem {
   column: ColumnReport;
 }
 
-/** Columns without a description: "must be written by hand" first, then inheritable. */
-export function workList(analysis: Analysis): WorkItem[] {
+/**
+ * Columns without a description: "must be written by hand" first, then
+ * inheritable. Columns that are only in catalog.json (not in YAML) are left
+ * out unless `includeNotInYaml` is set.
+ */
+export function workList(analysis: Analysis, includeNotInYaml = false): WorkItem[] {
   const items: WorkItem[] = [];
   for (const r of analysis.resources.values()) {
-    for (const c of r.columns) if (c.status !== 'documented') items.push({ resource: r, column: c });
+    for (const c of r.columns) {
+      if (c.status === 'documented' || (c.notInYaml && !includeNotInYaml)) continue;
+      items.push({ resource: r, column: c });
+    }
   }
   const rank = (s: string) => (s === 'missing' ? 0 : 1);
   return items.sort(
@@ -130,19 +137,22 @@ export interface DocsBlockCandidate {
   sameText: boolean;
   /** Doc blocks already used for this column. */
   docBlocks: string[];
-  /** Suggested block name, based on the column's origin. */
+  /** Suggested block name: an existing block, or one from the shared name pattern. */
   suggestedName: string;
 }
 
 export interface CandidateOptions {
   minModels?: number;
-  namePattern?: string;
+  /** Pattern for blocks shared by many models. Default `col_{column}`. */
+  sharedNamePattern?: string;
 }
 
+/** Columns grouped by name. Only columns that are in YAML: catalog-only columns cannot be linked. */
 function byColumnName(analysis: Analysis): Map<string, ColumnUsage[]> {
   const map = new Map<string, ColumnUsage[]>();
   for (const r of analysis.resources.values()) {
     for (const c of r.columns) {
+      if (c.notInYaml) continue;
       const key = c.name.toLowerCase();
       const list = map.get(key) ?? [];
       list.push({ resourceId: r.resource.uniqueId, label: r.label, column: c });
@@ -153,39 +163,35 @@ function byColumnName(analysis: Analysis): Map<string, ColumnUsage[]> {
 }
 
 /**
- * Columns that occur in at least `minModels` resources and are not all
- * linked to the same doc block already.
+ * Columns that occur in at least `minModels` resources and still need a
+ * shared doc block. A column is done when at least one usage links to a
+ * doc block and every other usage has its own, different text (a different
+ * meaning, kept on purpose).
  */
 export function docsBlockCandidates(analysis: Analysis, options: CandidateOptions = {}): DocsBlockCandidate[] {
   const minModels = options.minModels ?? 3;
-  const pattern = options.namePattern ?? DEFAULT_NAME_PATTERN;
+  const pattern = options.sharedNamePattern ?? DEFAULT_SHARED_NAME_PATTERN;
   const out: DocsBlockCandidate[] = [];
   for (const [column, usages] of byColumnName(analysis)) {
     if (usages.length < minModels) continue;
     const descriptions = [...new Set(usages.map((u) => u.column.description.trim()).filter((d) => d.length > 0))];
     const docBlocks = [...new Set(usages.map((u) => u.column.docBlock).filter((d): d is string => !!d))];
-    const allLinked = docBlocks.length === 1 && usages.every((u) => u.column.docBlock === docBlocks[0]);
-    if (allLinked) continue;
-    // Name the block after the origin shared by most usages.
-    const origins = new Map<string, { origin: ReturnType<Analysis['originOf']>; count: number }>();
-    for (const u of usages) {
-      const res = analysis.project.manifest.resources.get(u.resourceId)!;
-      const o = analysis.originOf(res, u.column.name);
-      const key = `${o.resource.uniqueId}|${o.column.toLowerCase()}`;
-      const entry = origins.get(key) ?? { origin: o, count: 0 };
-      entry.count++;
-      origins.set(key, entry);
+    if (docBlocks.length > 0) {
+      const linkedTexts = new Set(usages.filter((u) => u.column.docBlock).map((u) => u.column.description.trim()));
+      const done = usages
+        .filter((u) => !u.column.docBlock)
+        .every((u) => u.column.description.trim().length > 0 && !linkedTexts.has(u.column.description.trim()));
+      if (done) continue;
     }
-    const origin = [...origins.values()].sort(
-      (a, b) => b.count - a.count || a.origin.resource.name.localeCompare(b.origin.resource.name),
-    )[0].origin;
+    const sample = usages[0];
+    const res = analysis.project.manifest.resources.get(sample.resourceId)!;
     out.push({
       column,
       usages,
       descriptions,
       sameText: descriptions.length === 1,
       docBlocks,
-      suggestedName: docBlocks[0] ?? docBlockName(pattern, origin.resource, origin.column),
+      suggestedName: docBlocks[0] ?? docBlockName(pattern, res, sample.column.name),
     });
   }
   return out.sort((a, b) => Number(b.sameText) - Number(a.sameText) || b.usages.length - a.usages.length || a.column.localeCompare(b.column));

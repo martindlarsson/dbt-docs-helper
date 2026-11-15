@@ -61,13 +61,13 @@
       },
       {
         "command": "dbt-docs-helper.coverage.groupBy",
-        "title": "Group coverage by…",
+        "title": "Group coverage by\u2026",
         "category": "dbt Docs Helper",
         "icon": "$(list-tree)"
       },
       {
         "command": "dbt-docs-helper.candidates.createBlock",
-        "title": "Create shared doc block…",
+        "title": "Create shared doc block\u2026",
         "category": "dbt Docs Helper",
         "icon": "$(new-file)"
       },
@@ -110,6 +110,12 @@
         "command": "dbt-docs-helper.openLocation",
         "title": "Open",
         "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.workList.addColumns",
+        "title": "Add missing columns to YAML",
+        "category": "dbt Docs Helper",
+        "icon": "$(add)"
       }
     ],
     "menus": {
@@ -153,6 +159,10 @@
         {
           "command": "dbt-docs-helper.inheritAll",
           "when": "editorLangId == yaml || resourceExtname == .yml || resourceExtname == .yaml"
+        },
+        {
+          "command": "dbt-docs-helper.workList.addColumns",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -176,6 +186,11 @@
         {
           "command": "dbt-docs-helper.candidates.createBlock",
           "when": "view == dbt-docs-helper.candidates && viewItem == candidate",
+          "group": "inline"
+        },
+        {
+          "command": "dbt-docs-helper.workList.addColumns",
+          "when": "view == dbt-docs-helper.workList && viewItem == notInYaml-addable",
           "group": "inline"
         }
       ]
@@ -250,7 +265,13 @@
           "type": "string",
           "default": "col_{model}__{column}",
           "scope": "resource",
-          "markdownDescription": "Name of new doc blocks. `{model}` is the model where the column originates (`{source}_{table}` for sources); `{source}`, `{table}` and `{column}` are also available."
+          "markdownDescription": "Name of a doc block created from one column (\"Move to doc block\"). `{model}` is the model where the column originates (`{source}_{table}` for sources); `{source}`, `{table}` and `{column}` are also available."
+        },
+        "dbt-docs-helper.docsBlocks.sharedNamePattern": {
+          "type": "string",
+          "default": "col_{column}",
+          "scope": "resource",
+          "markdownDescription": "Name of a doc block shared by many models (from **Doc block candidates**). `{column}` is the column name."
         },
         "dbt-docs-helper.docsBlocks.minModels": {
           "type": "number",

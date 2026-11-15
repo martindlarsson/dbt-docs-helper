@@ -32,6 +32,7 @@ export const settings = {
   staleManifestWarning: (scope?: vscode.Uri) => cfg(scope).get<boolean>('staleManifestWarning', true),
   defaultDocsFile: (scope?: vscode.Uri) => cfg(scope).get<string>('docsBlocks.defaultFile', ''),
   namePattern: (scope?: vscode.Uri) => cfg(scope).get<string>('docsBlocks.namePattern', 'col_{model}__{column}'),
+  sharedNamePattern: (scope?: vscode.Uri) => cfg(scope).get<string>('docsBlocks.sharedNamePattern', 'col_{column}'),
   minModels: (scope?: vscode.Uri) => cfg(scope).get<number>('docsBlocks.minModels', 3),
   inlayHints: (scope?: vscode.Uri) => cfg(scope).get<boolean>('inlayHints.enabled', true),
   inlayHintsDocBlocks: (scope?: vscode.Uri) => cfg(scope).get<boolean>('inlayHints.showDocBlockText', true),

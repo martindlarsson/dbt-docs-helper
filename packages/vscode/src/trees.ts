@@ -24,6 +24,8 @@ type Node =
   | { type: 'resource'; state: ProjectState; report: ResourceReport }
   | { type: 'column'; state: ProjectState; report: ResourceReport; column: ColumnReport }
   | { type: 'section'; state: ProjectState; status: 'missing' | 'inheritable'; items: { report: ResourceReport; column: ColumnReport }[] }
+  | { type: 'notInYamlSection'; state: ProjectState; reports: ResourceReport[] }
+  | { type: 'notInYaml'; state: ProjectState; report: ResourceReport }
   | { type: 'candidate'; state: ProjectState; candidate: DocsBlockCandidate }
   | { type: 'usage'; state: ProjectState; report: ResourceReport; column: ColumnReport }
   | { type: 'message'; text: string; command?: vscode.Command };
@@ -42,8 +44,12 @@ function statusIcon(c: ColumnReport): vscode.ThemeIcon {
   return new vscode.ThemeIcon('circle-large-outline', new vscode.ThemeColor('problemsWarningIcon.foreground'));
 }
 
+/**
+ * Open the column in YAML, else the resource in YAML, else the resource's own
+ * file (SQL/CSV), e.g. for columns that are only in catalog.json.
+ */
 function openCommand(state: ProjectState, report: ResourceReport, column?: ColumnReport): vscode.Command | undefined {
-  const file = column?.yaml?.file ?? report.yaml?.file;
+  const file = column?.yaml?.file ?? report.yaml?.file ?? (report.resource.originalFilePath || undefined);
   if (!file) return undefined;
   const offset = column?.yaml?.column.nameRange[0] ?? report.yaml?.resource.nameRange[0] ?? 0;
   return { title: 'Open', command: 'dbt-docs-helper.openLocation', arguments: [state.project.root, file, offset] };
@@ -203,14 +209,20 @@ export class WorkListTree extends BaseTree {
     const items = workList(this.analysis(state)).map((i) => ({ report: i.resource, column: i.column }));
     const missing = items.filter((i) => i.column.status === 'missing');
     const inheritable = items.filter((i) => i.column.status === 'inheritable');
-    if (items.length === 0) return [{ type: 'message', text: 'Every column is documented 🎉' }];
-    return [
+    const notInYaml = [...this.analysis(state).resources.values()]
+      .filter((r) => r.columns.some((c) => c.notInYaml))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (items.length === 0 && notInYaml.length === 0) return [{ type: 'message', text: 'Every column is documented 🎉' }];
+    const nodes: Node[] = [
       { type: 'section', state, status: 'missing', items: missing },
       { type: 'section', state, status: 'inheritable', items: inheritable },
     ];
+    if (notInYaml.length > 0) nodes.push({ type: 'notInYamlSection', state, reports: notInYaml });
+    return nodes;
   }
 
   protected children(node: Node): Node[] {
+    if (node.type === 'notInYamlSection') return node.reports.map((report) => ({ type: 'notInYaml', state: node.state, report }));
     if (node.type !== 'section') return [];
     return node.items.slice(0, MAX_ITEMS).map((i) => ({ type: 'column', state: node.state, report: i.report, column: i.column }));
   }
@@ -225,6 +237,26 @@ export class WorkListTree extends BaseTree {
       item.iconPath = new vscode.ThemeIcon(node.status === 'missing' ? 'edit' : 'arrow-circle-down');
       return item;
     }
+    if (node.type === 'notInYamlSection') {
+      const item = new vscode.TreeItem('Not in YAML', vscode.TreeItemCollapsibleState.Collapsed);
+      const count = node.reports.reduce((n, r) => n + r.columns.filter((c) => c.notInYaml).length, 0);
+      item.description = `${count} columns in ${node.reports.length} models`;
+      item.tooltip = 'Columns that exist in the warehouse (catalog.json) but are not listed in YAML.';
+      item.iconPath = new vscode.ThemeIcon('database');
+      return item;
+    }
+    if (node.type === 'notInYaml') {
+      const cols = node.report.columns.filter((c) => c.notInYaml).map((c) => c.name);
+      const item = new vscode.TreeItem(node.report.label);
+      item.description = cols.join(', ');
+      item.tooltip = node.report.yaml
+        ? `Not in ${node.report.yaml.file}: ${cols.join(', ')}. Use the + button to add them.`
+        : `${node.report.label} has no YAML entry yet. Columns: ${cols.join(', ')}`;
+      item.iconPath = new vscode.ThemeIcon('add');
+      item.command = openCommand(node.state, node.report);
+      item.contextValue = node.report.yaml ? 'notInYaml-addable' : 'notInYaml';
+      return item;
+    }
     if (node.type === 'column') return columnItem(node.state, node.report, node.column, true);
     return new vscode.TreeItem('');
   }
@@ -235,7 +267,7 @@ export class WorkListTree extends BaseTree {
 export class CandidatesTree extends BaseTree {
   protected projectChildren(state: ProjectState): Node[] {
     const scope = vscode.Uri.file(state.project.root);
-    const list = docsBlockCandidates(this.analysis(state), { minModels: settings.minModels(scope), namePattern: settings.namePattern(scope) });
+    const list = docsBlockCandidates(this.analysis(state), { minModels: settings.minModels(scope), sharedNamePattern: settings.sharedNamePattern(scope) });
     if (list.length === 0) return [{ type: 'message', text: 'No columns to share as doc blocks' }];
     return list.slice(0, MAX_ITEMS).map((candidate) => ({ type: 'candidate', state, candidate }));
   }
@@ -270,6 +302,11 @@ export class CandidatesTree extends BaseTree {
 /** Argument for `createDocsBlockForCandidate` from a tree node. */
 export function candidateArg(node: Node): { root: string; column: string } | undefined {
   return node.type === 'candidate' ? { root: node.state.project.root, column: node.candidate.column } : undefined;
+}
+
+/** Arguments for `addMissingColumns` from a "Not in YAML" tree node. */
+export function addColumnsArgs(node: Node): [string, string] | undefined {
+  return node.type === 'notInYaml' ? [node.state.project.root, node.report.resource.uniqueId] : undefined;
 }
 
 export type TreeNode = Node;

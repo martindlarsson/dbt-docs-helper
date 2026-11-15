@@ -5,7 +5,7 @@ import { SECTION, settings } from './config';
 import { Diagnostics } from './diagnostics';
 import { ProjectManager } from './projectManager';
 import { CodeActions, Hover, InlayHints, YAML_SELECTOR } from './providers';
-import { candidateArg, CandidatesTree, CoverageTree, TreeNode, WorkListTree } from './trees';
+import { addColumnsArgs, candidateArg, CandidatesTree, CoverageTree, TreeNode, WorkListTree } from './trees';
 
 export interface ExtensionApi {
   manager: ProjectManager;
@@ -43,6 +43,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
       if (!pick) return;
       await vscode.workspace.getConfiguration(SECTION).update('coverage.groupBy', pick.label, vscode.ConfigurationTarget.Workspace);
       coverageTree.refresh();
+    }),
+    vscode.commands.registerCommand('dbt-docs-helper.workList.addColumns', (node: TreeNode) => {
+      const args = addColumnsArgs(node);
+      if (args) return vscode.commands.executeCommand('dbt-docs-helper.addMissingColumns', ...args);
+      return undefined;
     }),
     vscode.commands.registerCommand('dbt-docs-helper.candidates.createBlock', (node: TreeNode) => {
       const arg = candidateArg(node);

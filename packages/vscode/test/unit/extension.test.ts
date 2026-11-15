@@ -122,6 +122,40 @@ describe('extension (mocked VS Code)', () => {
     expect(cands.getChildren().length).toBeGreaterThan(0);
   });
 
+  it('creates a shared doc block from the candidates view, then drops the candidate', async () => {
+    const tree = __state.treeProviders.get('dbt-docs-helper.candidates');
+    const names = () => tree.getChildren().map((n: any) => tree.getTreeItem(n).label);
+    expect(names()).toContain('first_name');
+    const node = tree.getChildren().find((n: any) => tree.getTreeItem(n).label === 'first_name');
+    // name: default (col_first_name); usages: keep the pre-selected ones; file: the existing columns.md
+    __state.quickPickAnswers.push((items) => items.filter((i: any) => i.picked));
+    __state.quickPickAnswers.push((items) => items.find((i: any) => i.file === 'models/_docs/columns.md'));
+    await vscode.commands.executeCommand('dbt-docs-helper.candidates.createBlock', node);
+    const docs = __open(path.join(root, 'models/_docs/columns.md')).getText();
+    expect(docs).toContain('{% docs col_first_name %}\nCustomer first name\n{% enddocs %}');
+    const marts = __open(path.join(root, 'models/marts/_marts.yml')).getText();
+    expect(marts).toContain(`      - name: first_name\n        description: "{{ doc('col_first_name') }}"`);
+    expect(names()).not.toContain('first_name');
+  });
+
+  it('lists catalog-only columns separately in the work list', async () => {
+    const work = __state.treeProviders.get('dbt-docs-helper.workList');
+    const sections = work.getChildren();
+    expect(sections.map((s: any) => work.getTreeItem(s).label)).toEqual(['Write by hand', 'Can be inherited', 'Not in YAML']);
+    const byHand = work.getChildren(sections[0]).map((n: any) => work.getTreeItem(n));
+    expect(byHand.every((i: any) => i.command)).toBe(true);
+    const notInYaml = work.getChildren(sections[2]);
+    const seed = notInYaml.find((n: any) => work.getTreeItem(n).label === 'raw_customers');
+    expect(work.getTreeItem(seed).description).toBe('first_name, last_name');
+    __state.quickPickAnswers.push((items) => items.find((i: any) => i.label === 'Names only'));
+    await vscode.commands.executeCommand('dbt-docs-helper.workList.addColumns', seed);
+    const seeds = __open(path.join(root, 'seeds/_seeds.yml')).getText();
+    expect(seeds).toContain('      - name: created_at\n      - name: first_name\n      - name: last_name');
+    // a seed without a YAML entry opens its CSV file
+    const orders = notInYaml.find((n: any) => work.getTreeItem(n).label === 'raw_orders');
+    expect(work.getTreeItem(orders).command.arguments[1]).toBe('seeds/raw_orders.csv');
+  });
+
   it('runs the parse command in a terminal', async () => {
     __state.config.set('dbt-docs-helper.parseCommand', 'dbtf parse');
     await vscode.commands.executeCommand('dbt-docs-helper.runParse', root);

@@ -48,6 +48,7 @@ missing:
   --limit <n>
 candidates:
   --min-models <n>          (default: 3)
+  --shared-name-pattern <p> Name for shared doc blocks (default: col_{column})
 inherit:
   --write                   Update the YAML files (default is a dry run)
   --select <name,...>       Only these models
@@ -71,6 +72,7 @@ function main(argv: string[]): Result {
       'fail-on-stale': { type: 'boolean', default: false },
       'fail-on-orphans': { type: 'boolean', default: false },
       'name-pattern': { type: 'string' },
+      'shared-name-pattern': { type: 'string' },
       'only-missing': { type: 'boolean', default: false },
       limit: { type: 'string' },
       'min-models': { type: 'string', default: '3' },
@@ -121,7 +123,7 @@ function main(argv: string[]): Result {
     case 'missing':
       return missingCommand(analysis, { ...common, onlyMissing: values['only-missing']!, limit: num(values.limit, '--limit') });
     case 'candidates':
-      return candidatesCommand(analysis, { ...common, minModels: num(values['min-models'], '--min-models') ?? 3, namePattern: values['name-pattern'] });
+      return candidatesCommand(analysis, { ...common, minModels: num(values['min-models'], '--min-models') ?? 3, sharedNamePattern: values['shared-name-pattern'] });
     case 'conflicts':
       return conflictsCommand(analysis, common);
     case 'inherit':

@@ -297,7 +297,7 @@ export class Commands {
     const state = this.manager.projects().find((s) => s.project.root === arg.root);
     if (!state) return;
     const analysis = this.manager.analysis(state.project);
-    const cand = docsBlockCandidates(analysis, { minModels: 1, namePattern: settings.namePattern() }).find((c) => c.column === arg.column);
+    const cand = docsBlockCandidates(analysis, { minModels: 1, sharedNamePattern: settings.sharedNamePattern(vscode.Uri.file(state.project.root)) }).find((c) => c.column === arg.column);
     if (!cand) return;
     let text = cand.descriptions[0] ?? '';
     if (cand.descriptions.length > 1) {
@@ -314,7 +314,17 @@ export class Commands {
         '';
       if (!text) return;
     }
-    const name = await vscode.window.showInputBox({ title: 'Doc block name', value: cand.suggestedName, validateInput: (v) => (/^[A-Za-z_]\w*$/.test(v) ? undefined : 'Use letters, digits and underscores only.') });
+    const existingBlocks = state.project.docBlocks();
+    const name = await vscode.window.showInputBox({
+      title: 'Doc block name',
+      value: cand.suggestedName,
+      validateInput: (v) => {
+        if (!/^[A-Za-z_]\w*$/.test(v)) return 'Use letters, digits and underscores only.';
+        const existing = existingBlocks.get(v);
+        if (existing && existing.contents.trim() !== text.trim()) return `A doc block named "${v}" already exists with a different text.`;
+        return undefined;
+      },
+    });
     if (!name) return;
     const items = cand.usages
       .filter((u) => u.column.yaml)

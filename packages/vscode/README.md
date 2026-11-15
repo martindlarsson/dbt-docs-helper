@@ -62,7 +62,7 @@ Configurable per rule (`error`, `warning`, `information`, `hint`, `off`):
 The **dbt Docs Helper** view in the activity bar shows
 
 - **Coverage** per layer, folder, tag, owner (`meta.owner` / group) or resource type, including sources and seeds
-- a **Work list** with the columns that must be written by hand first, then the ones that can be inherited
+- a **Work list** with the columns that must be written by hand first, then the ones that can be inherited, and the columns that are in the warehouse (`catalog.json`) but not in YAML, with a button to add them
 - **Doc block candidates**: columns used in many models, strongest when the text is already the same everywhere
 
 ### Stale manifest
@@ -72,9 +72,13 @@ button. Set `dbt-docs-helper.parseCommand` to e.g. `dbtf parse` for Fusion or `u
 
 ## Doc block names
 
-New blocks are named `col_{model}__{column}`, where `{model}` is the model the column originates
-from (for sources `{source}_{table}`), e.g. `col_stg_customers__customer_id` or
-`col_crm_customers__id`. Change it with `dbt-docs-helper.docsBlocks.namePattern`, and set
+Blocks created from **Doc block candidates** are shared by many models and get a global name,
+`col_{column}` (e.g. `col_customer_id`); change it with `dbt-docs-helper.docsBlocks.sharedNamePattern`.
+
+Blocks created with **Move to doc block** on one column are named `col_{model}__{column}`, where
+`{model}` is the model the column originates from (for sources `{source}_{table}`), e.g.
+`col_stg_customers__customer_id` or `col_crm_customers__id`. Change it with
+`dbt-docs-helper.docsBlocks.namePattern`, and set
 `dbt-docs-helper.docsBlocks.defaultFile` (e.g. `models/_docs/columns.md`) to skip the question
 of where to save new blocks.
 
