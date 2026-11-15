@@ -131,30 +131,18 @@ packages/
 - **Columns only in `catalog.json`** are shown in their own "Not in YAML" section of the work
   list, per model, with a button to add them to YAML.
 
-### Remaining work
-- Fusion's own column lineage (step 3).
-- Handle `versions:` for versioned models.
-- Quick fix for model descriptions (today only columns).
-- Code lens/overview in `.md` files: which columns use the block.
-- **`dbt_project.yml` overview**: visualise the project configuration (paths, model configs per
-  folder, materializations, tags, vars, hooks) so users get an overview of it, and point out
-  common mistakes, e.g. config keys for folders that do not exist, typos in config keys,
-  missing `+` prefix, deprecated keys (`source-paths`, `data-paths`) and settings that dbt Fusion
-  no longer accepts.
-- **Model summary panel**: a panel that shows a summary of the model open in the editor
-  (whether the `.sql` or the YAML file is open): the model description, its columns with
-  descriptions and status (documented/inheritable/missing), upstream and downstream models,
-  and quick access to the fixes.
-- **Data types**: support for setting `data_type` on columns, either from the data platform
-  (`catalog.json` from `dbt docs generate`, or a direct query) or inferred from the manifest
-  (upstream columns' `data_type`, casts in the SQL, seed `column_types`). Useful for model
-  contracts and for documentation.
-- **Unused doc blocks**: find `{% docs %}` blocks that no model, source, seed or column
-  references with `{{ doc('…') }}` (e.g. left behind after a model was removed or a column was
-  relinked). Show them in the Problems panel and in a view, with quick fixes to delete the block or
-  link it to the columns whose text it matches. Also usable in CI (`check --fail-on-unused`).
-  This is different from the existing orphan check, which only looks at whether the block's
-  *name* refers to a model that no longer exists.
+### Planned work
+
+Planned work is tracked as [GitHub issues](https://github.com/martindlarsson/dbt-docs-helper/issues):
+
+- [#1 dbt_project.yml overview and checks for common mistakes](https://github.com/martindlarsson/dbt-docs-helper/issues/1)
+- [#2 Model summary panel for the open model](https://github.com/martindlarsson/dbt-docs-helper/issues/2)
+- [#3 Set column data types from the data platform or the manifest](https://github.com/martindlarsson/dbt-docs-helper/issues/3)
+- [#4 Find unused doc blocks](https://github.com/martindlarsson/dbt-docs-helper/issues/4)
+- [#5 Use dbt Fusion's own column lineage](https://github.com/martindlarsson/dbt-docs-helper/issues/5)
+- [#6 Support versioned models](https://github.com/martindlarsson/dbt-docs-helper/issues/6)
+- [#7 Quick fixes for model descriptions](https://github.com/martindlarsson/dbt-docs-helper/issues/7)
+- [#8 Code lens in .md files: which columns use a doc block](https://github.com/martindlarsson/dbt-docs-helper/issues/8)
 
 ## Existing tools
 

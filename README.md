@@ -19,7 +19,7 @@ Works with dbt Core and dbt Fusion: the tool only reads `target/manifest.json` a
 ## Status
 
 Version 0.1.0 – first working version of the VS Code extension and the CLI. Not published yet.
-See [docs/design.md](docs/design.md) for decisions, open questions and planned work.
+See [docs/design.md](docs/design.md) for decisions and open questions, and the [issues](https://github.com/martindlarsson/dbt-docs-helper/issues) for planned work.
 
 ## Structure
 
