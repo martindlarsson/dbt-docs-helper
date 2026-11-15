@@ -32,6 +32,9 @@ export class Uri {
   get path(): string {
     return this.fsPath;
   }
+  static joinPath(base: Uri, ...parts: string[]): Uri {
+    return new Uri(base.scheme, path.join(base.fsPath, ...parts));
+  }
   toString(): string {
     return `${this.scheme}://${this.fsPath}`;
   }
@@ -212,6 +215,8 @@ export const __state = {
   hoverProviders: [] as any[],
   codeActionProviders: [] as any[],
   treeProviders: new Map<string, any>(),
+  webviewProviders: new Map<string, any>(),
+  editorEvents: { active: new EventEmitter<any>(), selection: new EventEmitter<any>() },
   diagnostics: new Map<string, Diagnostic[]>(),
   config: new Map<string, unknown>(),
   messages: [] as string[],
@@ -241,6 +246,9 @@ export function __reset(root: string): void {
   __state.hoverProviders = [];
   __state.codeActionProviders = [];
   __state.treeProviders.clear();
+  __state.webviewProviders.clear();
+  __state.editorEvents = { active: new EventEmitter<any>(), selection: new EventEmitter<any>() };
+  window.activeTextEditor = undefined;
   __state.diagnostics.clear();
   __state.config.clear();
   __state.messages = [];
@@ -349,7 +357,12 @@ export const window = {
     __state.treeProviders.set(id, p);
     return disposable;
   },
-  onDidChangeActiveTextEditor: () => disposable,
+  onDidChangeActiveTextEditor: (l: Listener<any>) => __state.editorEvents.active.event(l),
+  onDidChangeTextEditorSelection: (l: Listener<any>) => __state.editorEvents.selection.event(l),
+  registerWebviewViewProvider(id: string, p: unknown) {
+    __state.webviewProviders.set(id, p);
+    return disposable;
+  },
   createTerminal: (opts: any) => ({ creationOptions: opts, name: opts.name, show() {}, sendText: (t: string) => __state.terminalText.push(t) }),
   withProgress: async (_o: unknown, task: (p: unknown, t: unknown) => unknown) => task({}, { isCancellationRequested: false }),
   showTextDocument: async () => undefined,
@@ -416,3 +429,36 @@ export const workspace = {
 };
 
 export const lm = undefined;
+
+/** Make a document the active editor, with the cursor at `offset`. */
+export function __showEditor(doc: TextDocument, offset = 0): void {
+  const pos = doc.positionAt(offset);
+  const editor = { document: doc, selection: { active: pos } };
+  window.activeTextEditor = editor;
+  __state.editorEvents.active.fire(editor);
+}
+
+/** A webview view that records the messages posted to it. */
+export function __webviewView() {
+  const received = new EventEmitter<any>();
+  const posted: any[] = [];
+  return {
+    visible: true,
+    posted,
+    /** Simulate a message sent from the webview's script. */
+    send: (m: unknown) => received.fire(m),
+    webview: {
+      options: {},
+      html: '',
+      cspSource: 'vscode-resource:',
+      asWebviewUri: (u: Uri) => u,
+      postMessage: async (m: unknown) => {
+        posted.push(m);
+        return true;
+      },
+      onDidReceiveMessage: (l: Listener<any>) => received.event(l),
+    },
+    onDidChangeVisibility: () => disposable,
+    onDidDispose: () => disposable,
+  };
+}

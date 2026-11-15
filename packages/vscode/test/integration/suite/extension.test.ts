@@ -79,4 +79,19 @@ describe('dbt-docs-helper in VS Code', () => {
       .join('\n');
     assert.ok(text.includes('Lineage'), text);
   });
+
+  it('shows the model summary for the open SQL file', async () => {
+    const api = vscode.extensions.getExtension(EXTENSION_ID)!.exports as { modelSummary: { lastMessage?: any } };
+    await vscode.commands.executeCommand('dbt-docs-helper.showModelSummary');
+    const doc = await vscode.workspace.openTextDocument(path.join(root(), 'models/marts/orders.sql'));
+    await vscode.window.showTextDocument(doc);
+    const message = await waitFor(() => {
+      const m = api.modelSummary.lastMessage;
+      return m?.type === 'summary' && m.summary.label === 'orders' ? m : undefined;
+    });
+    assert.deepStrictEqual(
+      message.summary.upstream.map((u: { label: string }) => u.label),
+      ['stg_orders', 'stg_payments'],
+    );
+  });
 });

@@ -2,6 +2,7 @@
 !dist/extension.js
 !resources/icon.png
 !resources/activity.svg
+!media/**
 !package.json
 !README.md
 !CHANGELOG.md

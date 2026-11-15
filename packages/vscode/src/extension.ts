@@ -3,12 +3,14 @@ import { coverage, percent } from '@dbt-docs-helper/core';
 import { Commands } from './commands';
 import { SECTION, settings } from './config';
 import { Diagnostics } from './diagnostics';
+import { MODEL_VIEW_ID, ModelSummaryView } from './modelSummary';
 import { ProjectManager } from './projectManager';
 import { CodeActions, Hover, InlayHints, YAML_SELECTOR } from './providers';
 import { addColumnsArgs, candidateArg, CandidatesTree, CoverageTree, TreeNode, WorkListTree } from './trees';
 
 export interface ExtensionApi {
   manager: ProjectManager;
+  modelSummary: ModelSummaryView;
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<ExtensionApi> {
@@ -22,6 +24,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
     vscode.languages.registerInlayHintsProvider(YAML_SELECTOR, new InlayHints(manager)),
     vscode.languages.registerHoverProvider(YAML_SELECTOR, new Hover(manager)),
     vscode.languages.registerCodeActionsProvider(YAML_SELECTOR, new CodeActions(manager), { providedCodeActionKinds: CodeActions.kinds }),
+  );
+
+  const modelSummary = new ModelSummaryView(manager, context.extensionUri);
+  context.subscriptions.push(
+    modelSummary,
+    vscode.window.registerWebviewViewProvider(MODEL_VIEW_ID, modelSummary),
+    vscode.commands.registerCommand('dbt-docs-helper.showModelSummary', () => vscode.commands.executeCommand(`${MODEL_VIEW_ID}.focus`)),
   );
 
   const coverageTree = new CoverageTree(manager);
@@ -95,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
 
   await manager.discover();
   updateStatus();
-  return { manager };
+  return { manager, modelSummary };
 }
 
 export function deactivate(): void {

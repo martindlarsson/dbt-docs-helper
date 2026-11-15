@@ -57,6 +57,13 @@ Configurable per rule (`error`, `warning`, `information`, `hint`, `off`):
 | `diagnostics.orphanDocsBlock` | warning | Block name refers to a model that was renamed or removed |
 | `diagnostics.columnsNotInYaml` | information | Columns in `catalog.json` that are not in YAML |
 
+### Model summary
+
+The **Model** view follows the editor: open a model's SQL file (or put the cursor on a model in a
+YAML file) to see its description, every column with its status and type, what it can inherit,
+and its upstream and downstream models with their coverage. The fixes (inherit, edit, link or move
+to a doc block, AI) are one click away, and clicking a column or a related model opens it.
+
 ### Coverage, work list and doc-block candidates
 
 The **dbt Docs Helper** view in the activity bar shows

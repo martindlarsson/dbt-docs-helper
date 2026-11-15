@@ -116,6 +116,22 @@
         "title": "Add missing columns to YAML",
         "category": "dbt Docs Helper",
         "icon": "$(add)"
+      },
+      {
+        "command": "dbt-docs-helper.showModelSummary",
+        "title": "Show model summary",
+        "category": "dbt Docs Helper",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "dbt-docs-helper.editDescription",
+        "title": "Edit column description",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.editModelDescription",
+        "title": "Edit model description",
+        "category": "dbt Docs Helper"
       }
     ],
     "menus": {
@@ -163,6 +179,14 @@
         {
           "command": "dbt-docs-helper.workList.addColumns",
           "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.editDescription",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.editModelDescription",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -193,6 +217,13 @@
           "when": "view == dbt-docs-helper.workList && viewItem == notInYaml-addable",
           "group": "inline"
         }
+      ],
+      "editor/title": [
+        {
+          "command": "dbt-docs-helper.showModelSummary",
+          "when": "dbt-docs-helper.hasProject && resourceExtname =~ /^\\.(sql|ya?ml|py|csv)$/",
+          "group": "navigation@90"
+        }
       ]
     },
     "viewsContainers": {
@@ -206,6 +237,11 @@
     },
     "views": {
       "dbt-docs-helper": [
+        {
+          "id": "dbt-docs-helper.model",
+          "name": "Model",
+          "type": "webview"
+        },
         {
           "id": "dbt-docs-helper.coverage",
           "name": "Coverage"

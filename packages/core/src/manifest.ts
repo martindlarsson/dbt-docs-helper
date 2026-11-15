@@ -35,6 +35,8 @@ export interface Resource {
   tags: string[];
   owner?: string;
   group?: string;
+  /** `config.materialized` (models/snapshots). */
+  materialized?: string;
   description: string;
   /** Upstream resource unique ids (models, seeds, snapshots, sources). */
   dependsOn: string[];
@@ -129,6 +131,7 @@ export function parseManifest(json: unknown): Manifest {
       tags: strArray(node.tags ?? node.config?.tags),
       owner: readOwner(node),
       group: typeof node.group === 'string' ? node.group : undefined,
+      materialized: typeof node.config?.materialized === 'string' ? node.config.materialized : undefined,
       description: str(node.description),
       dependsOn: strArray(node.depends_on?.nodes),
       columns: readColumns(node.columns),

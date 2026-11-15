@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- New **Model** view: a summary of the model open in the editor (SQL, Python, CSV or YAML), with
+  column status and types, inheritable descriptions, upstream/downstream models and one-click fixes.
+- New commands to write or edit a column or model description in an input box.
 - Stale manifest warnings no longer nag: documentation edits never count, a background tool that
   updates the manifest (e.g. the dbt extension with Fusion) is detected, and there is at most one
   notification per session, after 30 seconds. New setting `staleManifest`

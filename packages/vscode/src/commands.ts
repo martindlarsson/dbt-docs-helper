@@ -15,6 +15,7 @@ import {
   isSafeInheritance,
   ResourceReport,
   setColumnDescription,
+  setResourceDescription,
   TextEdit,
   YamlColumn,
 } from '@dbt-docs-helper/core';
@@ -35,6 +36,8 @@ export class Commands {
     reg('dbt-docs-helper.linkDocsBlock', (ref: ColumnRef, block?: string) => this.linkDocsBlock(ref, block));
     reg('dbt-docs-helper.moveToDocsBlock', (ref: ColumnRef, fromCandidate?: number) => this.moveToDocsBlock(ref, fromCandidate));
     reg('dbt-docs-helper.addMissingColumns', (root: string, resourceId: string) => this.addMissingColumns(root, resourceId));
+    reg('dbt-docs-helper.editDescription', (ref: ColumnRef) => this.editDescription(ref));
+    reg('dbt-docs-helper.editModelDescription', (root: string, resourceId: string) => this.editModelDescription(root, resourceId));
     reg('dbt-docs-helper.suggestWithAi', (ref: ColumnRef) => this.suggest(ref));
     reg('dbt-docs-helper.createDocsBlockForCandidate', (arg: { root: string; column: string }) => this.createBlockForCandidate(arg));
     reg('dbt-docs-helper.openLocation', (root: string, file: string, offset: number) => this.open(root, file, offset));
@@ -391,6 +394,40 @@ export class Commands {
     }
     const edit = new vscode.WorkspaceEdit();
     this.textEdits(edit, state.project, r.yaml.file, [te]);
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  /** Write or change a column description in an input box. */
+  async editDescription(ref: ColumnRef): Promise<void> {
+    const found = this.get(ref);
+    const yaml = found?.column.yaml;
+    if (!found || !yaml) return;
+    const { column } = found;
+    const value = await vscode.window.showInputBox({
+      title: `Description for ${found.resource.label}.${column.name}`,
+      value: column.rawDescription || column.candidates[0]?.description || '',
+      prompt: column.rawDescription ? undefined : column.candidates[0] ? `Prefilled from ${column.candidates[0].fromLabel}` : undefined,
+    });
+    if (value === undefined || value === column.rawDescription) return;
+    const edit = new vscode.WorkspaceEdit();
+    this.columnEdit(edit, found.project, yaml.file, yaml.column, value);
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  /** Write or change a model description in an input box. */
+  async editModelDescription(root: string, resourceId: string): Promise<void> {
+    const state = this.manager.projects().find((s) => s.project.root === root);
+    if (!state) return;
+    const r = this.manager.analysis(state.project).resources.get(resourceId);
+    const y = r?.yaml;
+    if (!r || !y) return;
+    const current = y.resource.description?.value ?? '';
+    const value = await vscode.window.showInputBox({ title: `Description for ${r.label}`, value: current });
+    if (value === undefined || value === current) return;
+    const index = state.project.yamlFiles.get(y.file);
+    if (!index) return;
+    const edit = new vscode.WorkspaceEdit();
+    this.textEdits(edit, state.project, y.file, [setResourceDescription(index, y.resource, value)]);
     await vscode.workspace.applyEdit(edit);
   }
 
