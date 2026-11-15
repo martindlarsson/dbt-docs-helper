@@ -15,6 +15,9 @@ import {
   isSafeInheritance,
   ResourceReport,
   setColumnDescription,
+  setColumnDataType,
+  removeColumnDataType,
+  formatType,
   setResourceDescription,
   TextEdit,
   YamlColumn,
@@ -38,6 +41,10 @@ export class Commands {
     reg('dbt-docs-helper.addMissingColumns', (root: string, resourceId: string) => this.addMissingColumns(root, resourceId));
     reg('dbt-docs-helper.editDescription', (ref: ColumnRef) => this.editDescription(ref));
     reg('dbt-docs-helper.editModelDescription', (root: string, resourceId: string) => this.editModelDescription(root, resourceId));
+    reg('dbt-docs-helper.setDataType', (ref: ColumnRef, type?: string) => this.setDataType(ref, type));
+    reg('dbt-docs-helper.setAllDataTypes', (arg?: vscode.Uri | { root: string; resourceId: string }, fixMismatches?: boolean) =>
+      this.setAllDataTypes(arg, fixMismatches === true),
+    );
     reg('dbt-docs-helper.suggestWithAi', (ref: ColumnRef) => this.suggest(ref));
     reg('dbt-docs-helper.createDocsBlockForCandidate', (arg: { root: string; column: string }) => this.createBlockForCandidate(arg));
     reg('dbt-docs-helper.openLocation', (root: string, file: string, offset: number) => this.open(root, file, offset));
@@ -429,6 +436,75 @@ export class Commands {
     const edit = new vscode.WorkspaceEdit();
     this.textEdits(edit, state.project, y.file, [setResourceDescription(index, y.resource, value)]);
     await vscode.workspace.applyEdit(edit);
+  }
+
+  /**
+   * Set `data_type` of a column: the given type, or the suggested one. An
+   * empty string removes it.
+   */
+  async setDataType(ref: ColumnRef, type?: string): Promise<void> {
+    const found = this.get(ref);
+    const yaml = found?.column.yaml;
+    if (!found || !yaml) return;
+    const value = type ?? found.column.typeSuggestion?.type;
+    if (value === undefined) return;
+    const index = found.project.yamlFiles.get(yaml.file);
+    if (!index) return;
+    const te =
+      value.trim() === ''
+        ? removeColumnDataType(index, yaml.column)
+        : setColumnDataType(index, yaml.column, formatType(value, settings.typeCase(vscode.Uri.file(found.project.root))));
+    if (!te) return;
+    const edit = new vscode.WorkspaceEdit();
+    this.textEdits(edit, found.project, yaml.file, [te]);
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  /** Set every suggested `data_type` that is missing in a model or a file (and, if asked, fix mismatches). */
+  async setAllDataTypes(arg: vscode.Uri | { root: string; resourceId: string } | undefined, fixMismatches: boolean): Promise<number> {
+    const targets = this.resolveTargets(arg);
+    if (!targets) return 0;
+    const typeCase = settings.typeCase(vscode.Uri.file(targets.project.root));
+    const byFile = new Map<string, TextEdit[]>();
+    let count = 0;
+    for (const r of targets.resources) {
+      for (const c of r.columns) {
+        if (!c.yaml) continue;
+        let type: string | undefined;
+        if (!c.dataType && c.typeSuggestion) type = c.typeSuggestion.type;
+        else if (fixMismatches && c.typeMismatch) type = c.typeMismatch.warehouse;
+        if (!type) continue;
+        const index = targets.project.yamlFiles.get(c.yaml.file);
+        if (!index) continue;
+        const list = byFile.get(c.yaml.file) ?? [];
+        list.push(setColumnDataType(index, c.yaml.column, formatType(type, typeCase)));
+        byFile.set(c.yaml.file, list);
+        count++;
+      }
+    }
+    if (count > 0) {
+      const edit = new vscode.WorkspaceEdit();
+      for (const [file, list] of byFile) this.textEdits(edit, targets.project, file, list);
+      await vscode.workspace.applyEdit(edit);
+    }
+    void vscode.window.showInformationMessage(
+      count > 0 ? `dbt-docs-helper: set ${count} data type${count === 1 ? '' : 's'}.` : 'dbt-docs-helper: no data types to set (none missing, or nothing known about them).',
+    );
+    return count;
+  }
+
+  /** A model (by id) or every model in a YAML file (by uri, default: the active editor). */
+  private resolveTargets(arg: vscode.Uri | { root: string; resourceId: string } | undefined): { project: DbtProject; resources: ResourceReport[] } | undefined {
+    if (arg && !(arg instanceof vscode.Uri) && 'resourceId' in arg) {
+      const state = this.manager.projects().find((s) => s.project.root === arg.root);
+      const r = state && this.manager.analysis(state.project).resources.get(arg.resourceId);
+      return state && r ? { project: state.project, resources: [r] } : undefined;
+    }
+    const uri = arg instanceof vscode.Uri ? arg : vscode.window.activeTextEditor?.document.uri;
+    const found = uri && this.manager.analysisFor(uri);
+    if (!found || !uri) return undefined;
+    const rel = found.state.project.relative(uri.fsPath);
+    return { project: found.state.project, resources: [...found.analysis.resources.values()].filter((r) => r.yaml?.file === rel) };
   }
 
   async suggest(ref: ColumnRef): Promise<void> {

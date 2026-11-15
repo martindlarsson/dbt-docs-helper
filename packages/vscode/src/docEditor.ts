@@ -19,6 +19,9 @@ import {
   newPropertiesFile,
   NewResourceEntry,
   removeDescription,
+  removeColumnDataType,
+  setColumnDataType,
+  formatType,
   replaceDocBlockContents,
   resourceForFile,
   setColumnDescription,
@@ -33,7 +36,7 @@ export const MODEL_VIEW_ID = 'dbt-docs-helper.model';
 export const PANEL_TYPE = 'dbt-docs-helper.docEditor';
 
 type ColumnAction = 'inherit' | 'link' | 'move' | 'ai' | 'unlink';
-type ModelAction = 'inheritAll' | 'addColumns';
+type ModelAction = 'inheritAll' | 'addColumns' | 'setAllTypes';
 
 /** Messages from the webview. Anything else is ignored. */
 export type FromWebview =
@@ -43,6 +46,7 @@ export type FromWebview =
   | { type: 'save'; target: 'model'; value: string }
   | { type: 'save'; target: 'column'; column: string; value: string }
   | { type: 'saveBlock'; block: string; value: string }
+  | { type: 'saveType'; column: string; value: string }
   | { type: 'action'; action: ColumnAction; column: string }
   | { type: 'action'; action: ModelAction };
 
@@ -239,6 +243,10 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
         if (typeof m.value !== 'string') return;
         const file = m.target === 'model' ? await this.saveModel(state, resourceId, m.value) : typeof m.column === 'string' ? await this.saveColumn(state, resourceId, m.column, m.value) : undefined;
         if (file) this.notify(host, { type: 'saved', file });
+      } else if (m.type === 'saveType') {
+        if (typeof m.column !== 'string' || typeof m.value !== 'string') return;
+        const file = await this.saveType(state, resourceId, m.column, m.value);
+        if (file) this.notify(host, { type: 'saved', file });
       } else if (m.type === 'saveBlock') {
         if (typeof m.block !== 'string' || typeof m.value !== 'string') return;
         const file = await this.saveBlock(state, m.block, m.value);
@@ -253,6 +261,8 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
             }
           } else if (m.action === 'inheritAll') {
             await vscode.commands.executeCommand('dbt-docs-helper.inheritAll', { root, resourceId });
+          } else if (m.action === 'setAllTypes') {
+            await vscode.commands.executeCommand('dbt-docs-helper.setAllDataTypes', { root, resourceId }, true);
           } else if (m.action === 'addColumns') {
             await vscode.commands.executeCommand('dbt-docs-helper.addMissingColumns', root, resourceId);
           }
@@ -316,7 +326,34 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
       this.textEdit(edit, state, report.yaml.file, te);
       return this.apply(state, edit, report.yaml.file);
     }
-    return this.createEntry(state, resourceId, { columns: { [column]: value } });
+    return this.createEntry(state, resourceId, { columns: { [column]: { description: value } } });
+  }
+
+  /** Set `data_type` of a column (empty removes it), adding the column or the model to YAML if needed. */
+  async saveType(state: ProjectState, resourceId: string, column: string, raw: string): Promise<string | undefined> {
+    const typed = raw.trim();
+    const value = typed && formatType(typed, settings.typeCase(vscode.Uri.file(state.project.root)));
+    const report = this.manager.analysis(state.project).resources.get(resourceId);
+    if (!report) return undefined;
+    const col = report.columns.find((c) => c.name.toLowerCase() === column.toLowerCase());
+    const edit = new vscode.WorkspaceEdit();
+    if (col?.yaml) {
+      if (value === (col.yaml.column.dataType?.value ?? '')) return undefined;
+      const index = state.project.yamlFiles.get(col.yaml.file)!;
+      const te = value === '' ? removeColumnDataType(index, col.yaml.column) : setColumnDataType(index, col.yaml.column, value);
+      if (!te) return undefined;
+      this.textEdit(edit, state, col.yaml.file, te);
+      return this.apply(state, edit, col.yaml.file);
+    }
+    if (value === '') return undefined;
+    if (report.yaml) {
+      const index = state.project.yamlFiles.get(report.yaml.file)!;
+      const te = addColumns(index, report.yaml.resource, [{ name: column, dataType: value }]);
+      if (!te) throw new Error('Cannot add columns to an inline (flow-style) YAML entry.');
+      this.textEdit(edit, state, report.yaml.file, te);
+      return this.apply(state, edit, report.yaml.file);
+    }
+    return this.createEntry(state, resourceId, { columns: { [column]: { dataType: value } } });
   }
 
   async saveModel(state: ProjectState, resourceId: string, raw: string): Promise<string | undefined> {
@@ -338,7 +375,11 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
   }
 
   /** Create the YAML entry of a model that has none, with all its known columns. */
-  private async createEntry(state: ProjectState, resourceId: string, values: { description?: string; columns?: Record<string, string> }): Promise<string | undefined> {
+  private async createEntry(
+    state: ProjectState,
+    resourceId: string,
+    values: { description?: string; columns?: Record<string, { description?: string; dataType?: string }> },
+  ): Promise<string | undefined> {
     const project = state.project;
     const resource = project.manifest.resources.get(resourceId);
     if (!resource || resource.kind === 'source') return undefined;
@@ -346,10 +387,10 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
     const entry: NewResourceEntry = {
       name: resource.name,
       description: values.description,
-      columns: (summary?.columns ?? []).map((c) => ({ name: c.name, description: values.columns?.[c.name] })),
+      columns: (summary?.columns ?? []).map((c) => ({ name: c.name, ...values.columns?.[c.name] })),
     };
-    for (const [name, description] of Object.entries(values.columns ?? {})) {
-      if (!entry.columns!.some((c) => c.name === name)) entry.columns!.push({ name, description });
+    for (const [name, v] of Object.entries(values.columns ?? {})) {
+      if (!entry.columns!.some((c) => c.name === name)) entry.columns!.push({ name, ...v });
     }
     const file = await this.chooseYamlFile(project, resource.originalFilePath, resource.kind);
     if (!file) return undefined;

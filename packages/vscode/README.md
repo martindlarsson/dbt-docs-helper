@@ -77,6 +77,27 @@ their data types, and a text field for every description:
 The editor follows the file you have open, and the same editor is in the side bar (**Document**).
 Turn off automatic saving with `dbt-docs-helper.docEditor.autoSave`.
 
+### Data types
+
+dbt Docs Helper knows the type of most columns, from (in this order):
+
+1. the warehouse (`catalog.json` from `dbt docs generate`)
+2. a cast in the model SQL (`cast(x as date)`, `x::date`)
+3. seed `column_types`
+4. upstream, following columns that are passed through or renamed (not aggregated or computed)
+
+In the documentation editor every column has a small type field: grey italic is the known type
+(press Enter to use it), normal text is the `data_type` in YAML, orange means YAML and the
+warehouse disagree. **Set N data types** writes all known types at once. In YAML files there are
+quick fixes (*Set data_type*, *Change data_type to … (as in the warehouse)*) and the command
+**Set all known data types in this file**.
+
+| Setting | Default | |
+|---|---|---|
+| `dataTypes.case` | lower | Write `date`, `DATE` or the type as the warehouse reports it |
+| `diagnostics.dataTypeMismatch` | warning | `data_type` differs from the warehouse |
+| `diagnostics.dataTypeMissing` | off | No `data_type`, but the type is known (useful with model contracts) |
+
 ### Coverage, work list and doc-block candidates
 
 The **dbt Docs Helper** view in the activity bar shows

@@ -8,3 +8,4 @@ export * from './insights';
 export * from './edits';
 export * from './staleness';
 export * from './summary';
+export * from './dataTypes';

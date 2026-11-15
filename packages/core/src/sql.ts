@@ -33,6 +33,19 @@ export interface SqlAnalysis {
   selects: Map<string, SelectItem>;
   /** Names of all output columns that could be read from the final select, in order (no `*`). */
   outputs: string[];
+  /** Lower-case output column -> type of a top-level cast (`cast(x as date)`, `x::date`). */
+  casts: Map<string, string>;
+}
+
+const TYPE = String.raw`([a-z_][\w ]*?(?:\s*\([\d\s,]+\))?)`;
+const CAST_FN = new RegExp(String.raw`^(?:try_|safe_)?cast\s*\(([\s\S]+)\s+as\s+${TYPE}\s*\)$`, 'i');
+const CAST_OP = new RegExp(String.raw`^([\s\S]+?)::\s*${TYPE}$`, 'i');
+
+/** The type of a top-level cast expression, if the expression is one. */
+export function castType(expression: string): string | undefined {
+  const e = expression.trim();
+  const m = CAST_FN.exec(e) ?? CAST_OP.exec(e);
+  return m ? m[2].trim().replace(/\s+/g, ' ') : undefined;
 }
 
 const KEYWORDS = new Set([
@@ -61,7 +74,8 @@ export function analyzeSql(rawSql: string | undefined): SqlAnalysis {
   const relations = new Map<string, RelationRef>();
   const selects = new Map<string, SelectItem>();
   const outputs: string[] = [];
-  if (!rawSql) return { relations, selects, outputs };
+  const casts = new Map<string, string>();
+  if (!rawSql) return { relations, selects, outputs, casts };
   const sql = stripComments(rawSql);
 
   // Import CTEs: `name as ( select * from {{ ref('x') }} )`
@@ -102,6 +116,13 @@ export function analyzeSql(rawSql: string | undefined): SqlAnalysis {
     for (const part of splitTopLevel(lastSelect)) {
       const outName = /\s+as\s+("?)(\w+)\1\s*$/i.exec(part)?.[2] ?? /^\s*(?:distinct\s+)?(?:\w+\.)?(\w+)\s*$/i.exec(part)?.[1];
       if (outName && !KEYWORDS.has(outName.toLowerCase())) outputs.push(outName);
+      const aliased = /^([\s\S]*?)\s+as\s+"?(\w+)"?\s*$/i.exec(part.trim());
+      const cast = aliased ? castType(aliased[1]) : castType(part);
+      const castOutput = aliased ? aliased[2] : /^\s*(?:\w+\.)?(\w+)\s*::/.exec(part)?.[1];
+      if (cast && castOutput) {
+        casts.set(castOutput.toLowerCase(), cast);
+        if (!aliased) outputs.push(castOutput);
+      }
       const m = /^\s*(?:distinct\s+)?(?:(\w+)\.)?(\w+)(?:\s+(?:as\s+)?(\w+))?\s*$/i.exec(part);
       if (!m) {
         const expr = expressionItem(part);
@@ -114,7 +135,7 @@ export function analyzeSql(rawSql: string | undefined): SqlAnalysis {
       selects.set(output.toLowerCase(), { output, column, qualifier });
     }
   }
-  return { relations, selects, outputs };
+  return { relations, selects, outputs, casts };
 }
 
 /** Bodies of CTEs: lower-case name -> text inside the parentheses. */
@@ -230,5 +251,6 @@ function expressionItem(part: string): SelectItem | undefined {
   }
   if (refs.size !== 1) return undefined;
   const [{ qualifier, column }] = refs.values();
-  return { output, column, qualifier, transformed: true };
+  // A cast keeps the meaning of the column: treat it as passed through.
+  return { output, column, qualifier, transformed: castType(expr) === undefined };
 }

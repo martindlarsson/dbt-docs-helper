@@ -29,6 +29,8 @@ export interface YamlColumn {
   keyIndent: number;
   flow: boolean;
   description?: YamlDescription;
+  /** `data_type:` of the column, if present. */
+  dataType?: YamlDescription;
 }
 
 export interface YamlResource {
@@ -113,8 +115,8 @@ function columnOf(lineStarts: number[], offset: number): number {
   return offsetToPosition(lineStarts, offset).character;
 }
 
-function readDescription(map: YAMLMap, text: string): YamlDescription | undefined {
-  const pair = getPair(map, 'description');
+function readDescription(map: YAMLMap, text: string, key = 'description'): YamlDescription | undefined {
+  const pair = getPair(map, key);
   if (!pair) return undefined;
   const keyRange = nodeRange(pair.key as Node)!;
   const value = pair.value as Node | null;
@@ -154,6 +156,7 @@ function readColumns(map: YAMLMap, text: string, lineStarts: number[]): Pick<Yam
         keyIndent: columnOf(lineStarts, nodeRange(namePair!.key as Node)![0]),
         flow: Boolean(item.flow),
         description: readDescription(item, text),
+        dataType: readDescription(item, text, 'data_type'),
       });
     }
   }

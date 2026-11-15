@@ -8,6 +8,7 @@ import {
   CommonOptions,
   conflictsCommand,
   coverageCommand,
+  dataTypesCommand,
   Format,
   inheritCommand,
   loadAnalysis,
@@ -29,6 +30,7 @@ Commands:
   conflicts    Columns with the same name but different descriptions
   inherit      Write descriptions inherited from upstream models into YAML
   add-columns  Add warehouse columns (from catalog.json) that are missing in YAML
+  data-types   Known column types (warehouse, casts, seeds, upstream); --write sets data_type
 
 Common options:
   --project-dir <dir>       dbt project directory (default: .)
@@ -42,6 +44,7 @@ coverage / check:
 check:
   --fail-on-stale           Fail when manifest.json is out of date (SQL, seeds, dbt_project.yml or new sources)
   --fail-on-orphans         Fail when a doc block refers to a model that does not exist
+  --fail-on-type-mismatch   Fail when a data_type in YAML differs from the warehouse (catalog.json)
   --name-pattern <pattern>  Doc block naming pattern (default: col_{model}__{column})
 missing:
   --only-missing            Hide columns that can be inherited
@@ -56,6 +59,11 @@ inherit:
   --include-name-matches    Also inherit columns matched only by name (not traced in SQL)
 add-columns:
   --write
+data-types:
+  --write                   Set data_type where it is missing and the type is known
+  --fix-mismatches          Also change data_type that differs from the warehouse
+  --type-case <lower|upper|asIs>  (default: lower)
+  --select <name,...>       Only these models
 `;
 
 function main(argv: string[]): Result {
@@ -71,6 +79,9 @@ function main(argv: string[]): Result {
       'include-inheritable': { type: 'boolean', default: false },
       'fail-on-stale': { type: 'boolean', default: false },
       'fail-on-orphans': { type: 'boolean', default: false },
+      'fail-on-type-mismatch': { type: 'boolean', default: false },
+      'fix-mismatches': { type: 'boolean', default: false },
+      'type-case': { type: 'string', default: 'lower' },
       'name-pattern': { type: 'string' },
       'shared-name-pattern': { type: 'string' },
       'only-missing': { type: 'boolean', default: false },
@@ -106,7 +117,7 @@ function main(argv: string[]): Result {
     failUnder: num(values['fail-under'], '--fail-under'),
     includeInheritable: values['include-inheritable']!,
   };
-  const known = ['coverage', 'check', 'missing', 'candidates', 'conflicts', 'inherit', 'add-columns'];
+  const known = ['coverage', 'check', 'missing', 'candidates', 'conflicts', 'inherit', 'add-columns', 'data-types'];
   if (!known.includes(command)) throw new UsageError(`Unknown command "${command}"`);
   const analysis = loadAnalysis(common);
 
@@ -119,6 +130,7 @@ function main(argv: string[]): Result {
         namePattern: values['name-pattern'],
         failOnStale: values['fail-on-stale']!,
         failOnOrphans: values['fail-on-orphans']!,
+        failOnTypeMismatch: values['fail-on-type-mismatch']!,
       });
     case 'missing':
       return missingCommand(analysis, { ...common, onlyMissing: values['only-missing']!, limit: num(values.limit, '--limit') });
@@ -136,6 +148,17 @@ function main(argv: string[]): Result {
       });
     case 'add-columns':
       return addColumnsCommand(analysis, { ...common, write: values.write! });
+    case 'data-types': {
+      const typeCase = values['type-case'] as 'lower' | 'upper' | 'asIs';
+      if (!['lower', 'upper', 'asIs'].includes(typeCase)) throw new UsageError(`Unknown --type-case "${typeCase}"`);
+      return dataTypesCommand(analysis, {
+        ...common,
+        write: values.write!,
+        fixMismatches: values['fix-mismatches']!,
+        typeCase,
+        select: values.select?.split(',').map((s) => s.trim()).filter(Boolean),
+      });
+    }
   }
   throw new UsageError(`Unknown command "${command}"`);
 }

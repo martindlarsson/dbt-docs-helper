@@ -25,7 +25,8 @@ describe('analyzeSql', () => {
     expect(a.selects.get('customer_id')).toEqual({ output: 'customer_id', column: 'id', qualifier: 'c' });
     expect(a.selects.get('status')?.qualifier).toBeUndefined();
     expect(a.selects.get('amount')).toMatchObject({ column: 'amount', qualifier: 'p', transformed: true });
-    expect(a.selects.get('created_date')).toMatchObject({ column: 'created_at', qualifier: 'o', transformed: true });
+    expect(a.selects.get('created_date')).toMatchObject({ column: 'created_at', qualifier: 'o', transformed: false });
+    expect(a.casts.get('created_date')).toBe('date');
     expect(a.selects.has('n')).toBe(false);
   });
 

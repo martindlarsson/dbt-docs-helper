@@ -42,7 +42,7 @@ describe('documentation editor', () => {
     expect(panel.title).toBe('Docs: orders');
     expect(panel.webview.html).toMatch(/default-src 'none'; style-src vscode-resource:; script-src 'nonce-[A-Za-z0-9]{32}'/);
     expect(panel.webview.html).toContain('class="host-panel"');
-    expect(last().summary.columns.map((c: any) => [c.name, c.dataType])).toEqual([
+    expect(last().summary.columns.map((c: any) => [c.name, c.suggestedType.type])).toEqual([
       ['order_id', 'INTEGER'],
       ['customer_id', 'INTEGER'],
       ['order_date', 'DATE'],

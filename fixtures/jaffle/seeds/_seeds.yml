@@ -6,3 +6,7 @@ seeds:
       - name: id
         description: Customer id in the source system
       - name: created_at
+  - name: raw_payments
+    config:
+      column_types:
+        amount: integer

@@ -2,9 +2,9 @@
  "metadata": {
   "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
   "dbt_version": "1.12.7",
-  "generated_at": "2026-11-15T07:10:30.063908Z",
+  "generated_at": "2026-11-15T14:01:22.990499Z",
   "invocation_id": "00000000-0000-0000-0000-000000000000",
-  "invocation_started_at": "2026-11-15T07:10:08.066386+00:00",
+  "invocation_started_at": "2026-11-15T14:01:09.820834+00:00",
   "env": {},
   "project_name": "jaffle",
   "project_id": "f9d1e024ef226b4dca0863d7d3ade287",
@@ -17,7 +17,7 @@
    "identifier": true,
    "column": null
   },
-  "run_started_at": "2026-11-15T07:10:08.066740+00:00"
+  "run_started_at": "2026-11-15T14:01:09.821203+00:00"
  },
  "nodes": {
   "model.jaffle.orders": {
@@ -180,7 +180,7 @@
    "patch_path": "jaffle://models/marts/_marts.yml",
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.736246,
+   "created_at": 1794751273.406731,
    "relation_name": "\"jaffle\".\"main\".\"orders\"",
    "raw_code": "select\n    o.order_id,\n    o.customer_id,\n    o.order_date,\n    o.status,\n    sum(p.amount) as amount\nfrom {{ ref('stg_orders') }} o\nleft join {{ ref('stg_payments') }} p using (order_id)\ngroup by 1, 2, 3, 4",
    "doc_blocks": [],
@@ -385,7 +385,7 @@
    "patch_path": "jaffle://models/marts/_marts.yml",
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.7338367,
+   "created_at": 1794751273.4046597,
    "relation_name": "\"jaffle\".\"main\".\"customers\"",
    "raw_code": "with orders as (select * from {{ ref('stg_orders') }})\nselect\n    c.customer_id,\n    c.first_name,\n    c.last_name,\n    c.created_at,\n    count(o.order_id) as number_of_orders\nfrom {{ ref('stg_customers') }} c\nleft join orders o using (customer_id)\ngroup by 1, 2, 3, 4",
    "doc_blocks": [],
@@ -592,7 +592,7 @@
    "patch_path": "jaffle://models/staging/_staging.yml",
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.739465,
+   "created_at": 1794751273.4096985,
    "relation_name": "\"jaffle\".\"main\".\"stg_payments\"",
    "raw_code": "select\n    id as payment_id,\n    order_id,\n    payment_method,\n    amount,\n    status\nfrom {{ ref('raw_payments') }}",
    "doc_blocks": [],
@@ -774,7 +774,7 @@
    "patch_path": "jaffle://models/staging/_staging.yml",
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.7374845,
+   "created_at": 1794751273.4076946,
    "relation_name": "\"jaffle\".\"main\".\"stg_customers\"",
    "raw_code": "select\n    id as customer_id,\n    first_name,\n    last_name,\n    created_at\nfrom {{ source('crm', 'customers') }}",
    "doc_blocks": [],
@@ -831,7 +831,7 @@
    "alias": "stg_orders",
    "checksum": {
     "name": "sha256",
-    "checksum": "8ae82aa3174efb1e87ad3d2196badb9ddbd4de4bcdd0583b27de2484e3ae9c25"
+    "checksum": "437eb593d7665a78aea2f00be3304cc5d3e7bf79a611b4a31130b1c3d9866249"
    },
    "config": {
     "enabled": true,
@@ -976,9 +976,9 @@
    "patch_path": "jaffle://models/staging/_staging.yml",
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.7382357,
+   "created_at": 1794751273.4083283,
    "relation_name": "\"jaffle\".\"main\".\"stg_orders\"",
-   "raw_code": "select\n    id as order_id,\n    user_id as customer_id,\n    order_date,\n    status,\n    created_at\nfrom {{ ref('raw_orders') }}",
+   "raw_code": "select\n    id as order_id,\n    user_id as customer_id,\n    cast(order_date as date) as order_date,\n    status,\n    created_at\nfrom {{ ref('raw_orders') }}",
    "doc_blocks": [],
    "language": "sql",
    "refs": [
@@ -999,7 +999,7 @@
    },
    "compiled_path": "target/compiled/jaffle/models/staging/stg_orders.sql",
    "compiled": true,
-   "compiled_code": "select\n    id as order_id,\n    user_id as customer_id,\n    order_date,\n    status,\n    created_at\nfrom \"jaffle\".\"main\".\"raw_orders\"",
+   "compiled_code": "select\n    id as order_id,\n    user_id as customer_id,\n    cast(order_date as date) as order_date,\n    status,\n    created_at\nfrom \"jaffle\".\"main\".\"raw_orders\"",
    "extra_ctes_injected": true,
    "extra_ctes": [],
    "contract": {
@@ -1051,7 +1051,9 @@
     "post-hook": [],
     "pre-hook": [],
     "quoting": {},
-    "column_types": {},
+    "column_types": {
+     "amount": "integer"
+    },
     "full_refresh": null,
     "unique_key": null,
     "on_schema_change": "ignore",
@@ -1080,10 +1082,14 @@
     "show": true,
     "node_color": null
    },
-   "patch_path": null,
+   "patch_path": "jaffle://seeds/_seeds.yml",
    "build_path": null,
-   "unrendered_config": {},
-   "created_at": 1794726610.5201948,
+   "unrendered_config": {
+    "column_types": {
+     "amount": "integer"
+    }
+   },
+   "created_at": 1794751273.71368,
    "relation_name": "\"jaffle\".\"main\".\"raw_payments\"",
    "raw_code": "",
    "doc_blocks": [],
@@ -1195,7 +1201,7 @@
    "patch_path": "jaffle://seeds/_seeds.yml",
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726611.0231452,
+   "created_at": 1794751273.7106693,
    "relation_name": "\"jaffle\".\"main\".\"raw_customers\"",
    "raw_code": "",
    "doc_blocks": [],
@@ -1272,7 +1278,7 @@
    "patch_path": null,
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.5258942,
+   "created_at": 1794751273.1598334,
    "relation_name": "\"jaffle\".\"main\".\"raw_orders\"",
    "raw_code": "",
    "doc_blocks": [],
@@ -1332,7 +1338,7 @@
    "patch_path": null,
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.8672726,
+   "created_at": 1794751273.5545807,
    "relation_name": null,
    "raw_code": "{{ test_unique(**_dbt_generic_test_kwargs) }}",
    "doc_blocks": [],
@@ -1429,7 +1435,7 @@
    "patch_path": null,
    "build_path": null,
    "unrendered_config": {},
-   "created_at": 1794726610.8699994,
+   "created_at": 1794751273.557451,
    "relation_name": null,
    "raw_code": "{{ test_not_null(**_dbt_generic_test_kwargs) }}",
    "doc_blocks": [],
@@ -1620,7 +1626,7 @@
     "tags": []
    },
    "relation_name": "\"jaffle\".\"main\".\"raw_customers\"",
-   "created_at": 1794726611.0460596,
+   "created_at": 1794751273.7355597,
    "unrendered_database": null,
    "unrendered_schema": "main",
    "doc_blocks": []

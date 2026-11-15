@@ -3,7 +3,7 @@
  * document (which would lose comments and formatting), we insert or replace
  * just the text that changes.
  */
-import { offsetToPosition, YamlColumn, YamlFileIndex, YamlResource } from './yamlIndex';
+import { offsetToPosition, YamlColumn, YamlDescription, YamlFileIndex, YamlResource } from './yamlIndex';
 
 export interface TextEdit {
   start: number;
@@ -60,21 +60,47 @@ function setDescription(
   target: Pick<YamlColumn, 'description' | 'nameRange' | 'keyIndent' | 'flow'>,
   description: string,
 ): TextEdit {
+  return setKey(index, target, 'description', target.description, description, target.nameRange[1]);
+}
+
+/**
+ * Set `key: value` in a mapping: replace the existing value, or insert a
+ * new line after `afterOffset`'s line with the mapping's indentation.
+ */
+function setKey(
+  index: YamlFileIndex,
+  target: Pick<YamlColumn, 'nameRange' | 'keyIndent' | 'flow'>,
+  key: string,
+  existing: YamlDescription | undefined,
+  value: string,
+  afterOffset: number,
+): TextEdit {
   const { text } = index;
-  if (target.description) {
-    const [start, end] = target.description.valueRange;
-    const scalar = target.flow ? JSON.stringify(description) : formatYamlScalar(description, target.keyIndent);
+  if (existing) {
+    const [start, end] = existing.valueRange;
+    const scalar = target.flow ? JSON.stringify(value) : formatYamlScalar(value, target.keyIndent);
     const needsSpace = start === end && text[start - 1] === ':';
     return { start, end, newText: (needsSpace ? ' ' : '') + scalar };
   }
   if (target.flow) {
     const at = target.nameRange[1];
-    return { start: at, end: at, newText: `, description: ${JSON.stringify(description)}` };
+    return { start: at, end: at, newText: `, ${key}: ${JSON.stringify(value)}` };
   }
-  const at = insertPointAtLineEnd(text, target.nameRange[1]);
+  const at = insertPointAtLineEnd(text, afterOffset);
   const nl = newline(text);
-  const scalar = formatYamlScalar(description, target.keyIndent).replace(/\n/g, nl);
-  return { start: at, end: at, newText: `${nl}${' '.repeat(target.keyIndent)}description: ${scalar}` };
+  const scalar = formatYamlScalar(value, target.keyIndent).replace(/\n/g, nl);
+  return { start: at, end: at, newText: `${nl}${' '.repeat(target.keyIndent)}${key}: ${scalar}` };
+}
+
+/** Set (insert or replace) `data_type` of a column; a new key goes after the description, or the name. */
+export function setColumnDataType(index: YamlFileIndex, column: YamlColumn, dataType: string): TextEdit {
+  const after = column.description ? Math.max(column.description.valueRange[1], column.description.keyRange[1]) : column.nameRange[1];
+  return setKey(index, column, 'data_type', column.dataType, dataType, after);
+}
+
+/** Remove `data_type` from a column. */
+export function removeColumnDataType(index: YamlFileIndex, column: YamlColumn): TextEdit | undefined {
+  return removeKey(index, column, column.dataType);
 }
 
 /**
@@ -84,7 +110,7 @@ function setDescription(
 export function addColumns(
   index: YamlFileIndex,
   resource: YamlResource,
-  columns: { name: string; description?: string }[],
+  columns: { name: string; description?: string; dataType?: string }[],
 ): TextEdit | undefined {
   if (columns.length === 0) return undefined;
   const { text, lineStarts } = index;
@@ -98,6 +124,7 @@ export function addColumns(
         const keyPad = ' '.repeat(dashIndent + keyOffset);
         let s = `${pad}-${' '.repeat(keyOffset - 1)}name: ${formatYamlScalar(c.name, dashIndent + keyOffset)}`;
         if (c.description) s += `${nl}${keyPad}description: ${formatYamlScalar(c.description, dashIndent + keyOffset).replace(/\n/g, nl)}`;
+        if (c.dataType) s += `${nl}${keyPad}data_type: ${formatYamlScalar(c.dataType, dashIndent + keyOffset)}`;
         return s;
       })
       .join(nl);
@@ -142,7 +169,10 @@ export function removeDescription(
   index: YamlFileIndex,
   target: Pick<YamlColumn, 'description' | 'flow'>,
 ): TextEdit | undefined {
-  const d = target.description;
+  return removeKey(index, target, target.description);
+}
+
+function removeKey(index: YamlFileIndex, target: Pick<YamlColumn, 'flow'>, d: YamlDescription | undefined): TextEdit | undefined {
   if (!d) return undefined;
   if (target.flow) return { start: d.valueRange[0], end: d.valueRange[1], newText: '""' };
   const { text, lineStarts } = index;
@@ -158,7 +188,7 @@ export function removeDescription(
 export interface NewResourceEntry {
   name: string;
   description?: string;
-  columns?: { name: string; description?: string }[];
+  columns?: { name: string; description?: string; dataType?: string }[];
 }
 
 const SECTION_FOR_KIND: Record<string, string> = { model: 'models', seed: 'seeds', snapshot: 'snapshots' };
@@ -172,6 +202,7 @@ function renderEntry(entry: NewResourceEntry, dashIndent: number, nl: string): s
     for (const c of entry.columns) {
       lines.push(`${key}  - name: ${formatYamlScalar(c.name, dashIndent + 6)}`);
       if (c.description) lines.push(`${key}    description: ${formatYamlScalar(c.description, dashIndent + 6).replace(/\n/g, nl)}`);
+      if (c.dataType) lines.push(`${key}    data_type: ${formatYamlScalar(c.dataType, dashIndent + 6)}`);
     }
   }
   return lines.join(nl);

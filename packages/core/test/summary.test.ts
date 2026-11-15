@@ -32,7 +32,10 @@ describe('modelSummary', () => {
     expect(orderId.inherit).toMatchObject({ from: 'stg_orders', docBlock: 'col_stg_orders__order_id', safe: true });
     expect(orderId.location?.file).toBe('models/marts/_marts.yml');
     expect(s.columns.find((c) => c.name === 'amount')!.inherit).toMatchObject({ kind: 'transformed', safe: false });
-    expect(s.columns.find((c) => c.name === 'customer_id')!.dataType).toBe('INTEGER');
+    const customerId = s.columns.find((c) => c.name === 'customer_id')!;
+    expect(customerId.dataType).toBeUndefined(); // nothing in YAML
+    expect(customerId.suggestedType).toEqual({ type: 'INTEGER', source: 'warehouse' });
+    expect(s.counts.typesToSet).toBe(5);
   });
 
   it('lists downstream models with their coverage', () => {

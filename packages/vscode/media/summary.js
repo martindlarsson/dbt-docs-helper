@@ -99,8 +99,51 @@
     return ta;
   }
 
+  /**
+   * A small text input for the column's data_type.
+   * @param {any} col
+   */
+  function typeField(col) {
+    const t = col.suggestedType;
+    const from = t ? (t.source === 'warehouse' ? 'the warehouse' : t.source === 'cast' ? 'a cast in the SQL' : t.source === 'seed' ? 'seed column_types' : t.from) : '';
+    const input = /** @type {HTMLInputElement} */ (
+      h('input', {
+        type: 'text',
+        class: `type-input${col.typeMismatch ? ' mismatch' : ''}`,
+        'data-key': `type:${col.name}`,
+        'data-original': col.dataType || '',
+        value: col.dataType || '',
+        placeholder: t ? t.type.toLowerCase() : 'data type',
+        size: Math.max(6, (col.dataType || (t && t.type) || 'data type').length + 1),
+        'aria-label': `Data type of ${col.name}`,
+        title: col.typeMismatch
+          ? `data_type is ${col.typeMismatch.yaml}, but the column is ${col.typeMismatch.warehouse} in the warehouse`
+          : col.dataType
+            ? `data_type in YAML${t ? ` (known type: ${t.type}, from ${from})` : ''}`
+            : t
+              ? `Not set in YAML. Known type: ${t.type}, from ${from}. Type it, or press Enter to use it.`
+              : 'Not set in YAML',
+        spellcheck: 'false',
+        onblur: () => commit(/** @type {any} */ (input)),
+        onkeydown: (/** @type {KeyboardEvent} */ e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!input.value && t) input.value = t.type.toLowerCase();
+            commit(/** @type {any} */ (input));
+          } else if (e.key === 'Escape') {
+            input.value = input.getAttribute('data-original') || '';
+            input.blur();
+          }
+        },
+      })
+    );
+    /** @type {any} */ (input).saveMessage = (/** @type {string} */ value) => ({ type: 'saveType', column: col.name, value });
+    return input;
+  }
+
   /** @param {HTMLTextAreaElement} ta */
   function grow(ta) {
+    if (ta.tagName !== 'TEXTAREA') return;
     ta.style.height = 'auto';
     ta.style.height = `${ta.scrollHeight + 2}px`;
   }
@@ -124,7 +167,7 @@
   }
 
   function commitAll() {
-    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) commit(ta);
+    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('[data-key]'))) commit(ta);
   }
 
   /** @param {string} text */
@@ -205,9 +248,15 @@
         h('span', {}, [h('i', { class: 'dot inheritable' }), ` ${c.inheritable} can inherit`]),
         h('span', {}, [h('i', { class: 'dot missing' }), ` ${c.missing} missing`]),
       ]),
-      safe > 0 || (catalogOnly > 0 && s.locations.yaml)
+      safe > 0 || (catalogOnly > 0 && s.locations.yaml) || c.typesToSet + c.typeMismatches > 0
         ? h('div', { class: 'actions' }, [
             safe > 0 && button(`Inherit ${safe} safe`, 'Write all descriptions that are passed through unchanged from a single upstream column', () => post({ type: 'action', action: 'inheritAll' }), 'primary'),
+            c.typesToSet + c.typeMismatches > 0 &&
+              button(
+                `Set ${c.typesToSet + c.typeMismatches} data type${c.typesToSet + c.typeMismatches === 1 ? '' : 's'}`,
+                `Write data_type for columns where the type is known (warehouse, casts, seed column_types, upstream)${c.typeMismatches ? `, and fix ${c.typeMismatches} that differ from the warehouse` : ''}`,
+                () => post({ type: 'action', action: 'setAllTypes' }),
+              ),
             catalogOnly > 0 && s.locations.yaml && button(`Add ${catalogOnly} column${catalogOnly === 1 ? '' : 's'} to YAML`, 'Columns in the warehouse (catalog.json) that are not in YAML', () => post({ type: 'action', action: 'addColumns' })),
           ])
         : null,
@@ -262,7 +311,8 @@
         col.location
           ? link(col.name, 'Show in YAML', () => open(col.location))
           : h('span', { class: 'col-name' }, [col.name]),
-        col.dataType && h('span', { class: 'type' }, [col.dataType.toLowerCase()]),
+        editable ? typeField(col) : (col.dataType || col.suggestedType) && h('span', { class: 'type' }, [(col.dataType || col.suggestedType.type).toLowerCase()]),
+        col.typeMismatch && editable && button(`Use ${col.typeMismatch.warehouse.toLowerCase()}`, 'Set data_type to the type in the warehouse', () => post({ type: 'saveType', column: col.name, value: col.typeMismatch.warehouse })),
         !inYaml && h('span', { class: 'muted small' }, [SOURCE[/** @type {'manifest'} */ (col.source)]]),
       ]),
       input,
@@ -306,7 +356,7 @@
   function snapshot() {
     const fields = new Map();
     const active = /** @type {HTMLElement|null} */ (document.activeElement);
-    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) {
+    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('[data-key]'))) {
       fields.set(ta.getAttribute('data-key'), {
         value: ta.value,
         original: ta.getAttribute('data-original') || '',
@@ -320,7 +370,7 @@
 
   /** @param {ReturnType<typeof snapshot>} snap */
   function restore(snap) {
-    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) {
+    for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('[data-key]'))) {
       const old = snap.fields.get(ta.getAttribute('data-key'));
       if (old) {
         const dirty = old.value !== old.original;
@@ -344,7 +394,7 @@
     try {
       draw(m);
       if (snap) restore(snap);
-      else for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('textarea'))) grow(ta);
+      else for (const ta of /** @type {NodeListOf<HTMLTextAreaElement>} */ (document.querySelectorAll('[data-key]'))) grow(ta);
     } finally {
       rendering = false;
     }
@@ -378,6 +428,6 @@
     else render(m);
   });
   window.addEventListener('blur', commitAll);
-  window.addEventListener('resize', () => document.querySelectorAll('textarea').forEach((ta) => grow(/** @type {HTMLTextAreaElement} */ (ta))));
+  window.addEventListener('resize', () => document.querySelectorAll('[data-key]').forEach((ta) => grow(/** @type {HTMLTextAreaElement} */ (ta))));
   post({ type: 'ready' });
 })();

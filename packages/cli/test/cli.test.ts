@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { indexYaml } from '@dbt-docs-helper/core';
-import { addColumnsCommand, checkCommand, coverageCommand, inheritCommand, loadAnalysis, missingCommand } from '../src/commands';
+import { addColumnsCommand, checkCommand, coverageCommand, dataTypesCommand, inheritCommand, loadAnalysis, missingCommand } from '../src/commands';
 
 const FIXTURE = path.resolve(__dirname, '../../../fixtures/jaffle');
 
@@ -69,9 +69,41 @@ describe('cli commands', () => {
     const dir = copyFixture();
     const future = new Date(Date.now() + 60_000);
     fs.utimesSync(path.join(dir, 'models/marts/orders.sql'), future, future);
-    const opts = { projectDir: dir, format: 'text' as const, by: 'folder' as const, includeInheritable: false, failOnStale: true, failOnOrphans: false };
+    const opts = { projectDir: dir, format: 'text' as const, by: 'folder' as const, includeInheritable: false, failOnStale: true, failOnOrphans: false, failOnTypeMismatch: false };
     const res = checkCommand(loadAnalysis(opts), opts);
     expect(res.exitCode).toBe(1);
     expect(res.output).toContain('models/marts/orders.sql');
+  });
+
+  it('lists and writes data types', () => {
+    const dir = copyFixture();
+    const marts = path.join(dir, 'models/marts/_marts.yml');
+    fs.writeFileSync(marts, fs.readFileSync(marts, 'utf8').replace('      - name: order_date\n', '      - name: order_date\n        data_type: timestamp\n'));
+    const base = { projectDir: dir, format: 'json' as const, fixMismatches: false, typeCase: 'lower' as const };
+    const listed = JSON.parse(dataTypesCommand(loadAnalysis(base), { ...base, write: false }).output);
+    expect(listed.columns.find((c: { resource: string; column: string }) => c.resource === 'orders' && c.column === 'order_date')).toMatchObject({
+      yaml: 'timestamp',
+      known: 'DATE',
+      status: 'mismatch',
+    });
+    // Without --fix-mismatches the wrong type stays.
+    dataTypesCommand(loadAnalysis(base), { ...base, write: true });
+    expect(fs.readFileSync(marts, 'utf8')).toContain('      - name: order_date\n        data_type: timestamp\n');
+    expect(fs.readFileSync(marts, 'utf8')).toContain('      - name: order_id\n        data_type: integer\n');
+    dataTypesCommand(loadAnalysis(base), { ...base, write: true, fixMismatches: true });
+    expect(fs.readFileSync(marts, 'utf8')).toContain('      - name: order_date\n        data_type: date\n');
+
+    const opts = { projectDir: dir, format: 'text' as const, by: 'folder' as const, includeInheritable: false, failOnStale: false, failOnOrphans: false, failOnTypeMismatch: true };
+    expect(checkCommand(loadAnalysis(opts), opts).exitCode).toBe(0);
+  });
+
+  it('check fails on a data_type that differs from the warehouse', () => {
+    const dir = copyFixture();
+    const marts = path.join(dir, 'models/marts/_marts.yml');
+    fs.writeFileSync(marts, fs.readFileSync(marts, 'utf8').replace('      - name: status\n', '      - name: status\n        data_type: integer\n'));
+    const opts = { projectDir: dir, format: 'text' as const, by: 'folder' as const, includeInheritable: false, failOnStale: false, failOnOrphans: false, failOnTypeMismatch: true };
+    const res = checkCommand(loadAnalysis(opts), opts);
+    expect(res.exitCode).toBe(1);
+    expect(res.output).toContain('ERROR: orders.status: data_type is integer, but VARCHAR in the warehouse.');
   });
 });

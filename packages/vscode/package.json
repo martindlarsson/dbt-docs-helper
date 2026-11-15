@@ -133,6 +133,16 @@
         "title": "Document this model",
         "category": "dbt Docs Helper",
         "icon": "$(book)"
+      },
+      {
+        "command": "dbt-docs-helper.setDataType",
+        "title": "Set data type",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.setAllDataTypes",
+        "title": "Set all known data types in this file",
+        "category": "dbt Docs Helper"
       }
     ],
     "menus": {
@@ -188,6 +198,14 @@
         {
           "command": "dbt-docs-helper.editModelDescription",
           "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.setDataType",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.setAllDataTypes",
+          "when": "editorLangId == yaml || resourceExtname == .yml || resourceExtname == .yaml"
         }
       ],
       "view/title": [
@@ -448,6 +466,30 @@
           "default": "information",
           "description": "Columns exist in the warehouse (catalog.json) but not in YAML."
         },
+        "dbt-docs-helper.diagnostics.dataTypeMismatch": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "warning",
+          "description": "A column's data_type in YAML differs from its type in the warehouse (catalog.json)."
+        },
+        "dbt-docs-helper.diagnostics.dataTypeMissing": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint",
+            "off"
+          ],
+          "default": "off",
+          "description": "A column has no data_type in YAML, but its type is known (warehouse, a cast, seed column_types or upstream). Useful with model contracts."
+        },
         "dbt-docs-helper.coverage.groupBy": {
           "type": "string",
           "enum": [
@@ -480,6 +522,16 @@
             "reporting"
           ],
           "description": "Folder names that are recognised as layers."
+        },
+        "dbt-docs-helper.dataTypes.case": {
+          "type": "string",
+          "enum": [
+            "lower",
+            "upper",
+            "asIs"
+          ],
+          "default": "lower",
+          "description": "How data types are written to YAML: lower case (date), upper case (DATE) or as the warehouse reports them."
         },
         "dbt-docs-helper.ai.enabled": {
           "type": "boolean",

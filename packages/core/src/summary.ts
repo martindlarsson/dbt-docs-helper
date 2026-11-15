@@ -3,7 +3,7 @@
  * columns with status, and the resources up- and downstream. Plain data, so
  * that it can be sent to a webview or printed by the CLI.
  */
-import type { Analysis, ColumnStatus, InheritanceCandidate, InheritanceKind } from './analysis';
+import type { Analysis, ColumnStatus, InheritanceCandidate, InheritanceKind, TypeSuggestion } from './analysis';
 import type { DbtProject } from './project';
 import { resourceLabel, Resource, ResourceKind } from './manifest';
 import { docRefName } from './yamlIndex';
@@ -31,7 +31,12 @@ export interface SummaryColumn {
   /** For a linked doc block: its file and how many columns use it. */
   docBlockFile?: string;
   docBlockUsages?: number;
+  /** `data_type` as written in YAML. */
   dataType?: string;
+  /** The type the column most likely has (warehouse, cast, seed or upstream). */
+  suggestedType?: TypeSuggestion;
+  /** YAML `data_type` differs from the warehouse type. */
+  typeMismatch?: { yaml: string; warehouse: string };
   notInYaml: boolean;
   /** Best upstream description when the column is not documented. */
   inherit?: { from: string; fromColumn: string; description: string; kind: InheritanceKind; docBlock?: string; safe: boolean };
@@ -65,7 +70,7 @@ export interface ModelSummary {
   owner?: string;
   materialized?: string;
   layer: string;
-  counts: { columns: number; documented: number; inheritable: number; missing: number; notInYaml: number };
+  counts: { columns: number; documented: number; inheritable: number; missing: number; notInYaml: number; typesToSet: number; typeMismatches: number };
   columns: SummaryColumn[];
   upstream: SummaryRelation[];
   downstream: SummaryRelation[];
@@ -126,7 +131,9 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
       docBlock: c.docBlock,
       docBlockFile: c.docBlock ? blocks.get(c.docBlock)?.file : undefined,
       docBlockUsages: c.docBlock ? blockUsages.get(c.docBlock) ?? 1 : undefined,
-      dataType: resource.columns.get(c.name.toLowerCase())?.dataType ?? project.catalog?.get(uniqueId)?.find((x) => x.name.toLowerCase() === c.name.toLowerCase())?.type,
+      dataType: c.dataType,
+      suggestedType: c.typeSuggestion,
+      typeMismatch: c.typeMismatch,
       notInYaml: !c.yaml,
       inherit: inheritOf(c.candidates),
       moreCandidates: Math.max(0, c.candidates.length - 1),
@@ -148,6 +155,7 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
         rawDescription: '',
         source: 'sql',
         notInYaml: true,
+        suggestedType: analysis.suggestType(resource, name),
         inherit: inheritOf(candidates),
         moreCandidates: Math.max(0, candidates.length - 1),
       });
@@ -193,6 +201,8 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
       inheritable: count('inheritable'),
       missing: count('missing'),
       notInYaml: columns.filter((c) => c.notInYaml).length,
+      typesToSet: columns.filter((c) => c.source === 'yaml' && !c.dataType && c.suggestedType).length,
+      typeMismatches: columns.filter((c) => c.typeMismatch).length,
     },
     columns,
     upstream: resource.dependsOn.map(relation).sort((a, b) => a.label.localeCompare(b.label)),

@@ -15,6 +15,8 @@ export const Codes = {
   orphan: 'orphan-docs-block',
   unknownBlock: 'unknown-docs-block',
   notInYaml: 'columns-not-in-yaml',
+  typeMismatch: 'data-type-mismatch',
+  typeMissing: 'data-type-missing',
 } as const;
 
 interface ProjectInsights {
@@ -99,6 +101,8 @@ export class Diagnostics implements vscode.Disposable {
       candidate: severity('docsBlockCandidate', 'hint', uri),
       unknownBlock: severity('unknownDocsBlock', 'warning', uri),
       notInYaml: severity('columnsNotInYaml', 'information', uri),
+      typeMismatch: severity('dataTypeMismatch', 'warning', uri),
+      typeMissing: severity('dataTypeMissing', 'off', uri),
     };
     const blocks = project.docBlocks();
 
@@ -153,6 +157,19 @@ export class Diagnostics implements vscode.Disposable {
               Codes.candidate,
             ),
           );
+        }
+        if (c.typeMismatch && sev.typeMismatch !== undefined && c.yaml.column.dataType) {
+          out.push(
+            diag(
+              toRange(index, c.yaml.column.dataType.valueRange),
+              `${c.name}: data_type is ${c.typeMismatch.yaml}, but the column is ${c.typeMismatch.warehouse} in the warehouse.`,
+              sev.typeMismatch,
+              Codes.typeMismatch,
+            ),
+          );
+        } else if (!c.dataType && c.typeSuggestion && sev.typeMissing !== undefined) {
+          const from = c.typeSuggestion.from ? ` (from ${c.typeSuggestion.from})` : c.typeSuggestion.source === 'warehouse' ? ' (in the warehouse)' : '';
+          out.push(diag(range, `${c.name} has no data_type; it is ${c.typeSuggestion.type}${from}.`, sev.typeMissing, Codes.typeMissing));
         }
         const ref = docRefName(c.rawDescription);
         if (ref && !blocks.has(ref) && sev.unknownBlock !== undefined && c.yaml.column.description) {

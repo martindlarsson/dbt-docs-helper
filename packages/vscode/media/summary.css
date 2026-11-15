@@ -98,3 +98,12 @@ body.host-panel main { max-width: 900px; }
 @media (min-width: 640px) {
   body.host-panel .relations-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* data_type */
+input.type-input {
+  font-family: var(--vscode-editor-font-family); font-size: 0.9em; padding: 0 4px; border-radius: 3px;
+  color: var(--vscode-input-foreground); background: transparent; border: 1px solid var(--border);
+}
+input.type-input::placeholder { color: var(--vscode-input-placeholderForeground); font-style: italic; }
+input.type-input:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; background: var(--vscode-input-background); }
+input.type-input.mismatch { border-color: var(--missing); color: var(--missing); }

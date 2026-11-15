@@ -41,6 +41,7 @@ export const settings = {
   groupBy: () => cfg().get<GroupBy>('coverage.groupBy', 'layer'),
   includeInheritable: () => cfg().get<boolean>('coverage.includeInheritable', false),
   docEditorAutoSave: () => cfg().get<boolean>('docEditor.autoSave', true),
+  typeCase: (scope?: vscode.Uri) => cfg(scope).get<'lower' | 'upper' | 'asIs'>('dataTypes.case', 'lower'),
   aiEnabled: () => cfg().get<boolean>('ai.enabled', false),
   aiModelFamily: () => cfg().get<string>('ai.modelFamily', ''),
   layers: () => cfg().get<string[]>('layers', ['staging', 'intermediate', 'marts', 'mart', 'core', 'base', 'reporting']),

@@ -60,6 +60,7 @@ jobs:
         run: |
           node ../../packages/cli/dist/cli.js inherit --write --include-renamed
           node ../../packages/cli/dist/cli.js add-columns --write
+          node ../../packages/cli/dist/cli.js data-types --write
           git diff --stat
           dbt parse --profiles-dir .
           node ../../packages/cli/dist/cli.js coverage

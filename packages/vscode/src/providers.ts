@@ -224,7 +224,34 @@ export class CodeActions implements vscode.CodeActionProvider {
       }
     }
 
+    if (resource && column?.yaml) {
+      const r = ref(ctx, resource, column);
+      const t = column.typeSuggestion;
+      if (column.typeMismatch) {
+        const title = `Change data_type to ${column.typeMismatch.warehouse} (as in the warehouse)`;
+        const a = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+        a.command = { title, command: 'dbt-docs-helper.setDataType', arguments: [r, column.typeMismatch.warehouse] };
+        a.diagnostics = diagnostics.filter((d) => d.code === 'data-type-mismatch');
+        a.isPreferred = true;
+        actions.push(a);
+      } else if (!column.dataType && t) {
+        const from = t.source === 'warehouse' ? 'warehouse' : t.source === 'cast' ? 'cast in the SQL' : t.source === 'seed' ? 'seed column_types' : t.from;
+        const title = `Set data_type: ${t.type.toLowerCase()} (${from})`;
+        const a = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+        a.command = { title, command: 'dbt-docs-helper.setDataType', arguments: [r] };
+        a.diagnostics = diagnostics.filter((d) => d.code === 'data-type-missing');
+        actions.push(a);
+      }
+    }
+
     if (resource) {
+      const typesToSet = resource.columns.filter((c) => c.yaml && ((!c.dataType && c.typeSuggestion) || c.typeMismatch)).length;
+      if (typesToSet > 1) {
+        const t = `Set ${typesToSet} data types in ${resource.label}`;
+        const a = new vscode.CodeAction(t, vscode.CodeActionKind.Source);
+        a.command = { title: t, command: 'dbt-docs-helper.setAllDataTypes', arguments: [{ root: ctx.state.project.root, resourceId: resource.resource.uniqueId }, true] };
+        actions.push(a);
+      }
       const notInYaml = resource.columns.filter((c) => c.notInYaml).length;
       if (notInYaml > 0) {
         const t = `Add ${notInYaml} missing column${notInYaml === 1 ? '' : 's'} to ${resource.label}`;

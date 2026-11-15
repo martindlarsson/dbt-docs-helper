@@ -8,6 +8,7 @@ import type { Resource } from './manifest';
 import { resourceLabel } from './manifest';
 import type { DbtProject } from './project';
 import { analyzeSql, SqlAnalysis } from './sql';
+import { sameType } from './dataTypes';
 import { docRefName, hasDocRef, YamlColumn, YamlResource } from './yamlIndex';
 
 export type InheritanceKind = 'passthrough' | 'renamed' | 'transformed';
@@ -32,6 +33,14 @@ export interface InheritanceCandidate {
 
 export type ColumnStatus = 'documented' | 'inheritable' | 'missing';
 
+export interface TypeSuggestion {
+  type: string;
+  /** warehouse: catalog.json; cast: a cast in the model SQL; seed: seed column_types; upstream: lineage. */
+  source: 'warehouse' | 'cast' | 'seed' | 'upstream';
+  /** For `upstream`: `model.column` the type comes from. */
+  from?: string;
+}
+
 export interface ColumnReport {
   resourceId: string;
   name: string;
@@ -45,6 +54,12 @@ export interface ColumnReport {
   /** The column is in the warehouse (catalog.json) but not in YAML. */
   notInYaml: boolean;
   yaml?: { file: string; column: YamlColumn };
+  /** `data_type` as written in YAML (or in the manifest when there is no YAML). */
+  dataType?: string;
+  /** The type the column most likely has, and where that comes from. */
+  typeSuggestion?: TypeSuggestion;
+  /** YAML says one type, the warehouse (catalog.json) another. */
+  typeMismatch?: { yaml: string; warehouse: string };
 }
 
 export interface ResourceReport {
@@ -264,6 +279,73 @@ export class Analysis {
     return current;
   }
 
+  // ---------------------------------------------------------------------------
+  // Data types
+
+  /** The type of a column in the warehouse (catalog.json). */
+  warehouseType(resource: Resource, column: string): string | undefined {
+    const lower = column.toLowerCase();
+    return this.project.catalog?.get(resource.uniqueId)?.find((c) => c.name.toLowerCase() === lower)?.type;
+  }
+
+  /** `data_type` declared for a column: YAML first, then the manifest. */
+  declaredType(resource: Resource, column: string): string | undefined {
+    const lower = column.toLowerCase();
+    const yaml = this.project.yamlFor(resource);
+    const yc = yaml?.resource.columns.find((c) => c.name.toLowerCase() === lower);
+    if (yc?.dataType?.value) return yc.dataType.value;
+    if (yaml && yc) return undefined;
+    return resource.columns.get(lower)?.dataType || undefined;
+  }
+
+  /** A type known for the column in this resource itself, without following lineage. */
+  private localType(resource: Resource, column: string, includeDeclared: boolean): TypeSuggestion | undefined {
+    const lower = column.toLowerCase();
+    const warehouse = this.warehouseType(resource, column);
+    if (warehouse) return { type: warehouse, source: 'warehouse' };
+    const cast = this.sql(resource).casts.get(lower);
+    if (cast) return { type: cast, source: 'cast' };
+    const seed = resource.columnTypes?.get(lower);
+    if (seed) return { type: seed, source: 'seed' };
+    if (includeDeclared) {
+      const declared = this.declaredType(resource, column);
+      if (declared) return { type: declared, source: 'upstream', from: `${resourceLabel(resource)}.${column}` };
+    }
+    return undefined;
+  }
+
+  /**
+   * The type a column most likely has: from the warehouse, a cast in the
+   * SQL, seed `column_types`, or else from upstream, following columns that
+   * are passed through or renamed (not transformed).
+   */
+  suggestType(resource: Resource, column: string): TypeSuggestion | undefined {
+    const own = this.localType(resource, column, false);
+    if (own) return own;
+    let current = { resource, column };
+    for (let i = 0; i < this.maxDepth; i++) {
+      const select = this.sql(current.resource).selects.get(current.column.toLowerCase());
+      let next: Resource | undefined;
+      let nextColumn = current.column;
+      if (select) {
+        if (select.transformed) return undefined;
+        next = this.resolveRelation(current.resource, select.qualifier);
+        nextColumn = select.column;
+      }
+      if (!next) {
+        const ups = current.resource.dependsOn
+          .map((id) => this.project.manifest.resources.get(id))
+          .filter((r): r is Resource => !!r && this.hasColumn(r, current.column));
+        if (ups.length === 1) next = ups[0];
+      }
+      if (!next) return undefined;
+      const found = this.localType(next, nextColumn, true);
+      if (found) return { ...found, source: 'upstream', from: found.from ?? `${resourceLabel(next)}.${nextColumn}` };
+      current = { resource: next, column: nextColumn };
+    }
+    return undefined;
+  }
+
   private hasColumn(resource: Resource, column: string): boolean {
     const lower = column.toLowerCase();
     if (this.columnText(resource, lower)) return true;
@@ -319,6 +401,7 @@ export class Analysis {
         candidates,
         notInYaml,
         yaml: yaml && yamlColumn ? { file: yaml.file, column: yamlColumn } : undefined,
+        ...this.typeInfo(resource, name, notInYaml),
       });
     }
 
@@ -333,6 +416,14 @@ export class Analysis {
       folder,
       layer: this.layerOf(resource),
     };
+  }
+
+  private typeInfo(resource: Resource, column: string, notInYaml: boolean): Pick<ColumnReport, 'dataType' | 'typeSuggestion' | 'typeMismatch'> {
+    const dataType = notInYaml ? undefined : this.declaredType(resource, column);
+    const typeSuggestion = this.suggestType(resource, column);
+    const warehouse = this.warehouseType(resource, column);
+    const typeMismatch = dataType && warehouse && !sameType(dataType, warehouse) ? { yaml: dataType, warehouse } : undefined;
+    return { dataType, typeSuggestion, typeMismatch };
   }
 
   /** All column reports. */

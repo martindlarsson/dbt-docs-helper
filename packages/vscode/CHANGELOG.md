@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Data types**: the type of each column is known from the warehouse, casts in the SQL, seed
+  `column_types` or upstream. Set `data_type` from the documentation editor, with quick fixes or
+  for a whole file; a warning when YAML and the warehouse disagree. Settings `dataTypes.case`,
+  `diagnostics.dataTypeMismatch` and `diagnostics.dataTypeMissing`.
+- A `cast()` of a column now counts as passed through (not transformed) when inheriting descriptions.
 - New **documentation editor** ("Document this model"): an editor tab next to the SQL file where
   you write the model and column descriptions without opening the YAML. Shows column data types,
   what can be inherited, doc blocks (editable for all columns, or unlink), and upstream/downstream

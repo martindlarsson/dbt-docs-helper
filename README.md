@@ -42,6 +42,7 @@ See [packages/vscode/README.md](packages/vscode/README.md) for the features. In 
   add missing columns (from `catalog.json`), inherit everything safe in the file, AI suggestion (opt-in).
 - **Problems panel** with configurable severity per rule.
 - **Documentation editor**: a tab next to the SQL file where you write the model and column descriptions (with data types and inheritance) without opening the YAML.
+- **Data types** from the warehouse, casts, seeds or upstream: set `data_type` in one click, and get a warning when YAML and the warehouse disagree.
 - **Side panel**: coverage per layer/folder/tag/owner/kind, work list, doc block candidates.
 - **Quiet stale-manifest handling**: documentation edits never need `dbt parse`; when SQL changes, a status bar icon (or one notification per session, or a silent background parse) instead of repeated pop-ups.
 
@@ -73,6 +74,7 @@ node packages/cli/dist/cli.js coverage --project-dir fixtures/jaffle --by layer
 | `conflicts` | Same column name, different descriptions |
 | `inherit` | Writes inherited descriptions to YAML (dry run unless `--write`). Only safe passthrough unless `--include-renamed` / `--include-name-matches` |
 | `add-columns` | Adds columns that exist in `catalog.json` but are missing in YAML |
+| `data-types` | Known column types (warehouse, casts, seed `column_types`, upstream). `--write` sets missing `data_type`, `--fix-mismatches` corrects wrong ones. `check --fail-on-type-mismatch` for CI |
 
 All commands accept `--format text|json|markdown` (markdown suits `$GITHUB_STEP_SUMMARY`).
 

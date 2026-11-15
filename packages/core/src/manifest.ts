@@ -37,6 +37,8 @@ export interface Resource {
   group?: string;
   /** `config.materialized` (models/snapshots). */
   materialized?: string;
+  /** Seeds: `config.column_types`, keyed by lower-case column name. */
+  columnTypes?: Map<string, string>;
   description: string;
   /** Upstream resource unique ids (models, seeds, snapshots, sources). */
   dependsOn: string[];
@@ -102,6 +104,13 @@ function readColumns(raw: any): Map<string, ColumnInfo> {
   return columns;
 }
 
+function readColumnTypes(raw: any): Map<string, string> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const map = new Map<string, string>();
+  for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') map.set(k.toLowerCase(), v);
+  return map.size > 0 ? map : undefined;
+}
+
 function readOwner(node: any): string | undefined {
   const meta = node?.config?.meta ?? node?.meta ?? {};
   const owner = meta?.owner ?? node?.config?.meta?.owner;
@@ -132,6 +141,7 @@ export function parseManifest(json: unknown): Manifest {
       owner: readOwner(node),
       group: typeof node.group === 'string' ? node.group : undefined,
       materialized: typeof node.config?.materialized === 'string' ? node.config.materialized : undefined,
+      columnTypes: readColumnTypes(node.config?.column_types),
       description: str(node.description),
       dependsOn: strArray(node.depends_on?.nodes),
       columns: readColumns(node.columns),

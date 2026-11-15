@@ -12,6 +12,9 @@ import {
   docsBlockCandidates,
   GroupBy,
   inheritedValue,
+  formatType,
+  setColumnDataType,
+  TypeCase,
   orphanDocBlocks,
   percent,
   setColumnDescription,
@@ -302,6 +305,7 @@ export interface CheckOptions extends CoverageOptions {
   namePattern?: string;
   failOnStale: boolean;
   failOnOrphans: boolean;
+  failOnTypeMismatch: boolean;
 }
 
 /** Everything a CI job wants: coverage threshold, stale manifest and orphaned doc blocks. */
@@ -318,13 +322,85 @@ export function checkCommand(analysis: Analysis, opts: CheckOptions): Result {
     const msg = `doc block "${o.name}" (${o.file}) refers to model "${o.model}", which does not exist.`;
     problems.push(opts.failOnOrphans ? `ERROR: ${msg}` : `WARNING: ${msg}`);
   }
-  const exitCode = cov.exitCode || ((opts.failOnStale && stale.stale) || (opts.failOnOrphans && orphans.length > 0) ? 1 : 0);
+  const typeMismatches = [...analysis.resources.values()].flatMap((r) => r.columns.filter((c) => c.typeMismatch).map((c) => ({ resource: r.label, column: c.name, ...c.typeMismatch! })));
+  for (const t of typeMismatches) {
+    const msg = `${t.resource}.${t.column}: data_type is ${t.yaml}, but ${t.warehouse} in the warehouse.`;
+    problems.push(opts.failOnTypeMismatch ? `ERROR: ${msg}` : `WARNING: ${msg}`);
+  }
+  const exitCode =
+    cov.exitCode ||
+    ((opts.failOnStale && stale.stale) || (opts.failOnOrphans && orphans.length > 0) || (opts.failOnTypeMismatch && typeMismatches.length > 0) ? 1 : 0);
   if (opts.format === 'json') {
     const json = JSON.parse(cov.output);
     return {
-      output: JSON.stringify({ ...json, stale: stale.stale, orphanDocBlocks: orphans, passed: exitCode === 0 }, null, 2),
+      output: JSON.stringify({ ...json, stale: stale.stale, orphanDocBlocks: orphans, typeMismatches, passed: exitCode === 0 }, null, 2),
       exitCode,
     };
   }
   return { output: [cov.output, ...(problems.length ? ['', ...problems] : [])].join('\n'), exitCode };
+}
+
+// -----------------------------------------------------------------------------
+
+export interface DataTypesOptions extends CommonOptions {
+  write: boolean;
+  fixMismatches: boolean;
+  typeCase: TypeCase;
+  select?: string[];
+}
+
+/** List known data types; with --write, set the missing ones in YAML (and with --fix-mismatches, the wrong ones). */
+export function dataTypesCommand(analysis: Analysis, opts: DataTypesOptions): Result {
+  const project = analysis.project;
+  type Row = { file?: string; resource: string; column: string; yaml?: string; known?: string; source?: string; status: 'ok' | 'missing' | 'mismatch' | 'unknown' };
+  const rows: Row[] = [];
+  const edits = new Map<string, TextEdit[]>();
+  let written = 0;
+  for (const r of analysis.resources.values()) {
+    if (opts.select && !opts.select.includes(r.label) && !opts.select.includes(r.resource.name)) continue;
+    for (const c of r.columns) {
+      if (c.notInYaml) continue;
+      const t = c.typeSuggestion;
+      const status: Row['status'] = c.typeMismatch ? 'mismatch' : c.dataType ? 'ok' : t ? 'missing' : 'unknown';
+      rows.push({
+        file: c.yaml?.file,
+        resource: r.label,
+        column: c.name,
+        yaml: c.dataType,
+        known: c.typeMismatch?.warehouse ?? t?.type,
+        source: c.typeMismatch ? 'warehouse' : t ? (t.from ? `${t.source}: ${t.from}` : t.source) : undefined,
+        status,
+      });
+      const value = status === 'missing' ? t!.type : status === 'mismatch' && opts.fixMismatches ? c.typeMismatch!.warehouse : undefined;
+      if (!value || !c.yaml) continue;
+      const index = project.yamlFiles.get(c.yaml.file)!;
+      const list = edits.get(c.yaml.file) ?? [];
+      list.push(setColumnDataType(index, c.yaml.column, formatType(value, opts.typeCase)));
+      edits.set(c.yaml.file, list);
+      written++;
+    }
+  }
+  if (opts.write) {
+    for (const [file, list] of edits) fs.writeFileSync(project.absolute(file), applyEdits(project.yamlFiles.get(file)!.text, list));
+  }
+  const mismatches = rows.filter((r) => r.status === 'mismatch').length;
+  if (opts.format === 'json') {
+    return { output: JSON.stringify({ written: opts.write ? written : 0, columns: rows }, null, 2), exitCode: 0 };
+  }
+  const shown = rows.filter((r) => r.status !== 'ok');
+  if (shown.length === 0) return { output: 'Every column with a known type has the right data_type.', exitCode: 0 };
+  const table = [['resource', 'column', 'yaml', 'known', 'from', 'status'], ...shown.map((r) => [r.resource, r.column, r.yaml ?? '', r.known ?? '', r.source ?? '', r.status])];
+  const widths = table[0].map((_, k) => Math.max(...table.map((row) => row[k].length)));
+  const lines =
+    opts.format === 'markdown'
+      ? [table[0], table[0].map(() => '---'), ...table.slice(1)].map((row) => `| ${row.join(' | ')} |`)
+      : table.map((row) => row.map((cell, k) => cell.padEnd(widths[k])).join('  ').trimEnd());
+  lines.push('');
+  const missing = rows.filter((r) => r.status === 'missing').length;
+  lines.push(
+    opts.write
+      ? `Wrote ${written} data types.`
+      : `${missing} data types can be set${mismatches ? `, ${mismatches} differ from the warehouse` : ''}. Run with --write${mismatches ? ' (and --fix-mismatches)' : ''} to update the YAML files.`,
+  );
+  return { output: lines.join('\n'), exitCode: 0 };
 }
