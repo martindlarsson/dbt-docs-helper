@@ -70,11 +70,12 @@ their data types, and a text field for every description:
   YAML file in its folder or in a new `_<folder>__models.yml`.
 - Empty columns show what they can inherit; **Use ↳ stg_orders** writes it (the same
   `{{ doc() }}` reference when upstream uses a doc block).
-- A column linked to a doc block shows the block's text: edit it to change it everywhere, or
-  **Unlink** to change it for this column only.
+- A column or model description linked to a doc block shows the block's text: edit it to change
+  it everywhere, or **Unlink** to change it for this column or model only. Both can be linked to an
+  existing doc block or moved to a new one (model blocks are named `model_{model}`).
 - Upstream and downstream models, with their coverage, are one click away.
 
-The editor follows the file you have open, and the same editor is in the side bar (**Document**).
+The editor follows the file you have open. The **Model** view in the side bar shows a short overview of the same model (description, coverage, what is left to do) with an **Edit documentation** button that opens the tab.
 Turn off automatic saving with `dbt-docs-helper.docEditor.autoSave`.
 
 ### Data types

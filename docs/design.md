@@ -67,6 +67,8 @@ There are two patterns, depending on how the block is created:
   model that uses the column, so the name should not point at one model.
   Setting: `dbt-docs-helper.docsBlocks.sharedNamePattern`. If a block with that name already exists
   with a different text, the user is asked for another name.
+- **Model descriptions**: `model_{model}`, e.g. `model_orders`. Setting:
+  `dbt-docs-helper.docsBlocks.modelNamePattern`.
 - **Blocks moved from one column** ("Move to doc block"): `col_{model}__{column}`, e.g.
   `col_stg_customers__customer_id`, as described below.
 

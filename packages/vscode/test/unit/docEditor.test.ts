@@ -124,6 +124,46 @@ describe('documentation editor', () => {
   });
 });
 
+describe('model description doc blocks', () => {
+  beforeEach(() => start());
+
+  it('moves a model description to a model_ doc block, edits the block, and unlinks it', async () => {
+    const { send, last } = openPanel();
+    // 1) block name: default model_orders  2) file: the existing columns.md
+    __state.quickPickAnswers.push((items) => items.find((i: any) => i.file === 'models/_docs/columns.md'));
+    await send({ type: 'action', action: 'moveModel' });
+    expect(read('models/marts/_marts.yml')).toContain(`  - name: orders\n    description: "{{ doc('model_orders') }}"`);
+    expect(read('models/_docs/columns.md')).toContain('{% docs model_orders %}\nOrder mart\n{% enddocs %}');
+    await tick(300);
+    expect(last().summary).toMatchObject({ docBlock: 'model_orders', description: 'Order mart', docBlockUsages: 1 });
+
+    await send({ type: 'saveBlock', block: 'model_orders', value: 'One row per order.' });
+    expect(read('models/_docs/columns.md')).toContain('{% docs model_orders %}\nOne row per order.\n{% enddocs %}');
+
+    await tick(300);
+    await send({ type: 'action', action: 'unlinkModel' });
+    expect(read('models/marts/_marts.yml')).toContain('  - name: orders\n    description: One row per order.\n');
+  });
+
+  it('links a model description to an existing doc block', async () => {
+    const { send } = openPanel();
+    __state.quickPickAnswers.push((items) => items.find((i: any) => i.label === 'col_crm_customers__id'));
+    await send({ type: 'action', action: 'linkModel' });
+    expect(read('models/marts/_marts.yml')).toContain(`  - name: orders\n    description: "{{ doc('col_crm_customers__id') }}"`);
+  });
+
+  it('shows an overview in the side bar with a button to the editor tab', async () => {
+    const view = __webviewView();
+    __state.webviewProviders.get('dbt-docs-helper.model').resolveWebviewView(view);
+    __showEditor(__open(path.join(root, 'models/marts/orders.sql')) as any);
+    expect(__state.panels).toHaveLength(0);
+    view.send({ type: 'openPanel' });
+    await tick();
+    expect(__state.panels).toHaveLength(1);
+    expect(__state.panels[0].title).toBe('Docs: orders');
+  });
+});
+
 describe('documentation editor without a YAML file', () => {
   beforeEach(() =>
     start((dir) => {

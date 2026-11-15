@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The side bar **Model** view is now a compact overview with an **Edit documentation** button; the
+  editing happens in the tab next to the SQL file.
+- Doc blocks for model descriptions in the documentation editor: edit the block's text, unlink,
+  link to an existing block, or move the description to a new `model_{model}` block (setting
+  `docsBlocks.modelNamePattern`).
 - **Data types**: the type of each column is known from the warehouse, casts in the SQL, seed
   `column_types` or upstream. Set `data_type` from the documentation editor, with quick fixes or
   for a whole file; a warning when YAML and the warehouse disagree. Settings `dataTypes.case`,

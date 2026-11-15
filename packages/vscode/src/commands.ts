@@ -10,6 +10,7 @@ import {
   docBlockAppendText,
   docBlockName,
   docRef,
+  docRefName,
   docsBlockCandidates,
   inheritedValue,
   isSafeInheritance,
@@ -38,6 +39,8 @@ export class Commands {
     reg('dbt-docs-helper.inheritAll', (arg?: vscode.Uri | { root: string; resourceId: string }) => this.inheritAll(arg));
     reg('dbt-docs-helper.linkDocsBlock', (ref: ColumnRef, block?: string) => this.linkDocsBlock(ref, block));
     reg('dbt-docs-helper.moveToDocsBlock', (ref: ColumnRef, fromCandidate?: number) => this.moveToDocsBlock(ref, fromCandidate));
+    reg('dbt-docs-helper.linkModelDocsBlock', (root: string, resourceId: string, block?: string) => this.linkModelDocsBlock(root, resourceId, block));
+    reg('dbt-docs-helper.moveModelToDocsBlock', (root: string, resourceId: string) => this.moveModelToDocsBlock(root, resourceId));
     reg('dbt-docs-helper.addMissingColumns', (root: string, resourceId: string) => this.addMissingColumns(root, resourceId));
     reg('dbt-docs-helper.editDescription', (ref: ColumnRef) => this.editDescription(ref));
     reg('dbt-docs-helper.editModelDescription', (root: string, resourceId: string) => this.editModelDescription(root, resourceId));
@@ -301,6 +304,76 @@ export class Commands {
     const lines = existing.split('\n');
     const end = new vscode.Position(lines.length - 1, lines[lines.length - 1].length);
     edit.insert(uri, end, docBlockAppendText(existing, name, text));
+  }
+
+  /** The YAML entry of a model, for editing its description. */
+  private modelYaml(root: string, resourceId: string) {
+    const state = this.manager.projects().find((s) => s.project.root === root);
+    const r = state && this.manager.analysis(state.project).resources.get(resourceId);
+    const y = r?.yaml;
+    const index = y && state!.project.yamlFiles.get(y.file);
+    return state && r && y && index ? { project: state.project, report: r, yaml: y, index } : undefined;
+  }
+
+  /** Link a model description to a doc block (pick one when not given). */
+  async linkModelDocsBlock(root: string, resourceId: string, blockName?: string): Promise<void> {
+    const found = this.modelYaml(root, resourceId);
+    if (!found) return;
+    let name = blockName;
+    if (!name) {
+      const text = found.yaml.resource.description?.value ?? '';
+      const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+      const items = [...found.project.docBlocks().values()]
+        .map((b) => {
+          const same = !!text && norm(b.contents) === norm(text);
+          const forModel = b.name.toLowerCase().includes(found.report.resource.name.toLowerCase());
+          return { label: b.name, description: same ? 'same text' : forModel ? 'same model name' : undefined, detail: truncate(b.contents, 120), rank: same ? 0 : forModel ? 1 : b.name.startsWith('model_') ? 2 : 3 };
+        })
+        .sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
+      if (items.length === 0) {
+        void vscode.window.showInformationMessage('dbt-docs-helper: the project has no doc blocks yet. Use "Move to doc block" to create one.');
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(items, { placeHolder: `Doc block for ${found.report.label}`, matchOnDetail: true });
+      if (!pick) return;
+      name = pick.label;
+    }
+    const edit = new vscode.WorkspaceEdit();
+    this.textEdits(edit, found.project, found.yaml.file, [setResourceDescription(found.index, found.yaml.resource, docRef(name))]);
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  /** Move a model description into a new doc block (`model_{model}`) and link to it. */
+  async moveModelToDocsBlock(root: string, resourceId: string): Promise<void> {
+    const found = this.modelYaml(root, resourceId);
+    if (!found) return;
+    const text = found.yaml.resource.description?.value?.trim() ?? '';
+    if (!text || docRefName(text)) {
+      void vscode.window.showInformationMessage('dbt-docs-helper: write a description first; it is then moved to the doc block.');
+      return;
+    }
+    const pattern = settings.modelNamePattern(vscode.Uri.file(root));
+    const blocks = found.project.docBlocks();
+    const name = await vscode.window.showInputBox({
+      title: 'Doc block name',
+      value: docBlockName(pattern, found.report.resource, ''),
+      prompt: `Pattern: ${pattern}`,
+      validateInput: (v) => {
+        if (!/^[A-Za-z_]\w*$/.test(v)) return 'Use letters, digits and underscores only.';
+        const existing = blocks.get(v);
+        if (existing && existing.contents.trim() !== text) return `A doc block named "${v}" already exists with a different text.`;
+        return undefined;
+      },
+    });
+    if (!name) return;
+    const edit = new vscode.WorkspaceEdit();
+    if (!blocks.has(name)) {
+      const file = await this.chooseDocsFile(found.project);
+      if (!file) return;
+      await this.appendBlock(edit, found.project, file, name, text);
+    }
+    this.textEdits(edit, found.project, found.yaml.file, [setResourceDescription(found.index, found.yaml.resource, docRef(name))]);
+    await vscode.workspace.applyEdit(edit);
   }
 
   async createBlockForCandidate(arg: { root: string; column: string }): Promise<void> {

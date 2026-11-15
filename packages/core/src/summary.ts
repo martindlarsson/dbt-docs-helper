@@ -63,6 +63,9 @@ export interface ModelSummary {
   /** Model description as written in YAML. */
   rawDescription: string;
   docBlock?: string;
+  /** For a linked doc block: its file and how many descriptions (models and columns) use it. */
+  docBlockFile?: string;
+  docBlockUsages?: number;
   /** Path of the SQL/CSV file (sources: the YAML file). */
   file: string;
   yamlFile?: string;
@@ -112,6 +115,8 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
   const blockUsages = new Map<string, number>();
   for (const r of analysis.resources.values()) {
     for (const c of r.columns) if (c.docBlock) blockUsages.set(c.docBlock, (blockUsages.get(c.docBlock) ?? 0) + 1);
+    const modelBlock = docRefName(r.yaml?.resource.description?.value);
+    if (modelBlock) blockUsages.set(modelBlock, (blockUsages.get(modelBlock) ?? 0) + 1);
   }
   const blocks = project.docBlocks();
   const inheritOf = (candidates: InheritanceCandidate[]): SummaryColumn['inherit'] => {
@@ -189,6 +194,8 @@ export function modelSummary(analysis: Analysis, uniqueId: string, downstream?: 
     description,
     rawDescription: rawDescription ?? (yaml ? '' : resource.description),
     docBlock: docRefName(rawDescription),
+    docBlockFile: docRefName(rawDescription) ? blocks.get(docRefName(rawDescription)!)?.file : undefined,
+    docBlockUsages: docRefName(rawDescription) ? blockUsages.get(docRefName(rawDescription)!) ?? 1 : undefined,
     file: resource.originalFilePath,
     yamlFile: yaml?.file,
     tags: resource.tags,

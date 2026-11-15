@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import {
   addColumns,
   addResourceEntry,
+  docRefName,
   downstreamIndex,
   findAt,
   modelSummary,
@@ -36,7 +37,7 @@ export const MODEL_VIEW_ID = 'dbt-docs-helper.model';
 export const PANEL_TYPE = 'dbt-docs-helper.docEditor';
 
 type ColumnAction = 'inherit' | 'link' | 'move' | 'ai' | 'unlink';
-type ModelAction = 'inheritAll' | 'addColumns' | 'setAllTypes';
+type ModelAction = 'inheritAll' | 'addColumns' | 'setAllTypes' | 'linkModel' | 'moveModel' | 'unlinkModel';
 
 /** Messages from the webview. Anything else is ignored. */
 export type FromWebview =
@@ -261,6 +262,12 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
             }
           } else if (m.action === 'inheritAll') {
             await vscode.commands.executeCommand('dbt-docs-helper.inheritAll', { root, resourceId });
+          } else if (m.action === 'linkModel') {
+            await vscode.commands.executeCommand('dbt-docs-helper.linkModelDocsBlock', root, resourceId);
+          } else if (m.action === 'moveModel') {
+            await vscode.commands.executeCommand('dbt-docs-helper.moveModelToDocsBlock', root, resourceId);
+          } else if (m.action === 'unlinkModel') {
+            await this.unlinkModel(state, resourceId);
           } else if (m.action === 'setAllTypes') {
             await vscode.commands.executeCommand('dbt-docs-helper.setAllDataTypes', { root, resourceId }, true);
           } else if (m.action === 'addColumns') {
@@ -468,6 +475,19 @@ export class DocEditor implements vscode.WebviewViewProvider, vscode.Disposable 
     const index = state.project.yamlFiles.get(col.yaml.file)!;
     const edit = new vscode.WorkspaceEdit();
     this.textEdit(edit, state, col.yaml.file, setColumnDescription(index, col.yaml.column, col.description));
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  /** Replace a model description's doc() reference with the block's text. */
+  private async unlinkModel(state: ProjectState, resourceId: string): Promise<void> {
+    const analysis = this.manager.analysis(state.project);
+    const report = analysis.resources.get(resourceId);
+    const y = report?.yaml;
+    const raw = y?.resource.description?.value;
+    if (!y || !raw || !docRefName(raw)) return;
+    const index = state.project.yamlFiles.get(y.file)!;
+    const edit = new vscode.WorkspaceEdit();
+    this.textEdit(edit, state, y.file, setResourceDescription(index, y.resource, analysis.render(raw)));
     await vscode.workspace.applyEdit(edit);
   }
 

@@ -107,3 +107,11 @@ input.type-input {
 input.type-input::placeholder { color: var(--vscode-input-placeholderForeground); font-style: italic; }
 input.type-input:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; background: var(--vscode-input-background); }
 input.type-input.mismatch { border-color: var(--missing); color: var(--missing); }
+
+/* Side bar overview */
+.overview { display: grid; gap: 6px; margin-top: 10px; }
+.overview h1 { font-size: 1.15em; }
+.overview p { margin: 0; }
+.overview-description { overflow-wrap: anywhere; }
+.overview .todo { font-family: var(--vscode-editor-font-family); overflow-wrap: anywhere; }
+button.wide { width: 100%; padding: 4px 8px; margin-top: 6px; }

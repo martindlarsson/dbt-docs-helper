@@ -210,7 +210,6 @@
         s.locations.yaml
           ? link(fileName(s.locations.yaml.file), s.locations.yaml.file, () => open(s.locations.yaml))
           : h('span', { class: 'muted' }, ['no YAML yet: it is created when you write']),
-        !isPanel && link('Open beside editor', 'Open this editor in a tab next to the SQL file', () => post({ type: 'openPanel' })),
       ]),
       s.tags.length || s.owner
         ? h('div', { class: 'muted small' }, [s.owner ? `Owner: ${s.owner}` : '', s.owner && s.tags.length ? ' \u00b7 ' : '', s.tags.length ? `Tags: ${s.tags.join(', ')}` : ''])
@@ -221,12 +220,76 @@
   /** @param {any} s */
   function modelDescription(s) {
     const editable = s.kind !== 'source' || !!s.locations.yaml;
-    return h('section', { class: 'model-description' }, [
-      h('h2', {}, ['Description']),
-      editable
-        ? field(`model:${s.uniqueId}`, s.rawDescription || '', `Describe ${s.label}\u2026`, (value) => ({ type: 'save', target: 'model', value }), `Description of ${s.label}`)
-        : h('p', {}, [s.description]),
-      s.docBlock && h('p', { class: 'muted small' }, [`Uses doc block ${s.docBlock}: `, s.description]),
+    const act = (/** @type {string} */ a) => post({ type: 'action', action: a });
+    /** @type {(Node|null|false)[]} */
+    const extras = [];
+    let input;
+    if (s.docBlock && editable) {
+      // The description is a doc block: edit the block's text (for every description that uses it).
+      input = field(`modelblock:${s.docBlock}`, s.description || '', 'Text of the doc block\u2026', (value) => ({ type: 'saveBlock', block: s.docBlock, value }), `Doc block ${s.docBlock}`);
+      extras.push(
+        h('span', { class: 'muted small' }, [`Doc block ${s.docBlock}`, s.docBlockUsages > 1 ? ` \u00b7 used by ${s.docBlockUsages} descriptions, edits change all of them` : '']),
+        link('Unlink', 'Copy the text into this model so it can be changed here only', () => act('unlinkModel')),
+        link('Link to another doc block\u2026', 'Use another doc block', () => act('linkModel')),
+      );
+    } else if (editable) {
+      input = field(`model:${s.uniqueId}`, s.rawDescription || '', `Describe ${s.label}\u2026`, (value) => ({ type: 'save', target: 'model', value }), `Description of ${s.label}`);
+      if (s.locations.yaml) {
+        extras.push(link('Link to doc block\u2026', 'Use an existing doc block', () => act('linkModel')));
+        if ((s.rawDescription || '').trim()) extras.push(link('Move to doc block\u2026', 'Move the text to a doc block that can be reused', () => act('moveModel')));
+      }
+    } else {
+      input = h('p', {}, [s.description]);
+    }
+    return h('section', { class: 'model-description' }, [h('h2', {}, ['Description']), input, extras.length ? h('div', { class: 'actions row-actions' }, extras) : null]);
+  }
+
+  /**
+   * The compact overview in the side bar: status of the model and a button to the editor tab.
+   * @param {any} m
+   */
+  function overview(m) {
+    const s = m.summary;
+    const c = s.counts;
+    const total = Math.max(1, c.columns);
+    const pct = (/** @type {number} */ n) => `${(100 * n) / total}%`;
+    const todo = s.columns.filter((/** @type {any} */ col) => col.status !== 'documented');
+    const meta = [s.kind, s.materialized, s.layer && s.layer !== 'other' ? s.layer : undefined].filter(Boolean);
+    const hasDescription = !!(s.description && s.description.trim());
+    const text = hasDescription ? (s.description.length > 220 ? `${s.description.slice(0, 219)}\u2026` : s.description) : '';
+    const facts = [
+      c.typesToSet + c.typeMismatches > 0 ? `${c.typesToSet + c.typeMismatches} data type${c.typesToSet + c.typeMismatches === 1 ? '' : 's'} to set` : '',
+      `${s.upstream.length} upstream`,
+      `${s.downstream.length} downstream`,
+    ].filter(Boolean);
+    return h('div', { class: 'overview' }, [
+      m.stale ? h('p', { class: 'banner' }, ['manifest.json is out of date.']) : '',
+      h('div', { class: 'title-row' }, [
+        h('h1', { title: s.uniqueId }, [s.label]),
+        h('span', { class: 'chips' }, meta.map((x) => h('span', { class: 'chip small' }, [x]))),
+      ]),
+      hasDescription
+        ? h('p', { class: 'overview-description', title: s.description }, [text])
+        : h('p', { class: 'warning' }, ['No description yet.']),
+      h('div', { class: 'bar', role: 'img', 'aria-label': `${c.documented} documented, ${c.inheritable} inheritable, ${c.missing} missing` }, [
+        h('span', { class: 'documented', width: pct(c.documented) }),
+        h('span', { class: 'inheritable', width: pct(c.inheritable) }),
+        h('span', { class: 'missing', width: pct(c.missing) }),
+      ]),
+      h('p', { class: 'muted small' }, [
+        `${c.documented}/${c.columns} columns documented`,
+        c.inheritable ? ` \u00b7 ${c.inheritable} can inherit` : '',
+        c.missing ? ` \u00b7 ${c.missing} missing` : '',
+      ]),
+      todo.length > 0
+        ? h('p', { class: 'small todo' }, [
+            h('span', { class: 'muted' }, ['To do: ']),
+            todo.slice(0, 6).map((/** @type {any} */ col) => col.name).join(', '),
+            todo.length > 6 ? ` +${todo.length - 6}` : '',
+          ])
+        : h('p', { class: 'small' }, ['Every column is documented.']),
+      h('p', { class: 'muted small' }, [facts.join(' \u00b7 ')]),
+      h('button', { class: 'primary wide', onclick: () => post({ type: 'openPanel' }) }, ['Edit documentation']),
     ]);
   }
 
@@ -407,6 +470,10 @@
     app.replaceChildren();
     if (!m || m.type === 'empty') {
       app.append(h('p', { class: 'empty' }, [m ? m.message : 'Loading\u2026']));
+      return;
+    }
+    if (!isPanel) {
+      app.append(overview(m));
       return;
     }
     const s = m.summary;

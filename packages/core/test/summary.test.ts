@@ -92,3 +92,20 @@ describe('modelSummary for editing', () => {
     ]);
   });
 });
+
+describe('model description doc blocks', () => {
+  it('reports the block of a model description and counts every use', () => {
+    const project = DbtProject.load(ROOT);
+    project.setFileText('models/_docs/models.md', '{% docs model_orders %}\nOne row per order.\n{% enddocs %}\n');
+    const file = 'models/marts/_marts.yml';
+    project.setFileText(file, project.yamlFiles.get(file)!.text.replace('    description: Order mart', `    description: "{{ doc('model_orders') }}"`));
+    const s = modelSummary(new Analysis(project), 'model.jaffle.orders')!;
+    expect(s).toMatchObject({
+      description: 'One row per order.',
+      rawDescription: "{{ doc('model_orders') }}",
+      docBlock: 'model_orders',
+      docBlockFile: 'models/_docs/models.md',
+      docBlockUsages: 1,
+    });
+  });
+});

@@ -143,6 +143,16 @@
         "command": "dbt-docs-helper.setAllDataTypes",
         "title": "Set all known data types in this file",
         "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.linkModelDocsBlock",
+        "title": "Link model description to a doc block",
+        "category": "dbt Docs Helper"
+      },
+      {
+        "command": "dbt-docs-helper.moveModelToDocsBlock",
+        "title": "Move model description to a doc block",
+        "category": "dbt Docs Helper"
       }
     ],
     "menus": {
@@ -206,6 +216,14 @@
         {
           "command": "dbt-docs-helper.setAllDataTypes",
           "when": "editorLangId == yaml || resourceExtname == .yml || resourceExtname == .yaml"
+        },
+        {
+          "command": "dbt-docs-helper.linkModelDocsBlock",
+          "when": "false"
+        },
+        {
+          "command": "dbt-docs-helper.moveModelToDocsBlock",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -263,7 +281,7 @@
       "dbt-docs-helper": [
         {
           "id": "dbt-docs-helper.model",
-          "name": "Document",
+          "name": "Model",
           "type": "webview"
         },
         {
@@ -340,6 +358,12 @@
           "default": "col_{model}__{column}",
           "scope": "resource",
           "markdownDescription": "Name of a doc block created from one column (\"Move to doc block\"). `{model}` is the model where the column originates (`{source}_{table}` for sources); `{source}`, `{table}` and `{column}` are also available."
+        },
+        "dbt-docs-helper.docsBlocks.modelNamePattern": {
+          "type": "string",
+          "default": "model_{model}",
+          "scope": "resource",
+          "markdownDescription": "Name of a doc block created from a model description. `{model}` is the model name (`{source}_{table}` for sources)."
         },
         "dbt-docs-helper.docsBlocks.sharedNamePattern": {
           "type": "string",
