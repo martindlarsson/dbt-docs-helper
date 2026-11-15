@@ -143,6 +143,7 @@ Planned work is tracked as [GitHub issues](https://github.com/martindlarsson/dbt
 - [#6 Support versioned models](https://github.com/martindlarsson/dbt-docs-helper/issues/6)
 - [#7 Quick fixes for model descriptions](https://github.com/martindlarsson/dbt-docs-helper/issues/7)
 - [#8 Code lens in .md files: which columns use a doc block](https://github.com/martindlarsson/dbt-docs-helper/issues/8)
+- [#9 Flag YAML model names that do not match any SQL file, and suggest a fix](https://github.com/martindlarsson/dbt-docs-helper/issues/9)
 
 ## Existing tools
 
