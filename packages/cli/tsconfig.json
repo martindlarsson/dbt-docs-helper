@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "out",
+    "rootDir": "..",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": { "@dbt-docs-helper/core": ["../core/src/index.ts"] }
+  },
+  "include": ["src"]
+}

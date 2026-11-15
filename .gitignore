@@ -15,3 +15,4 @@ fixtures/**/target/*
 !fixtures/**/target/manifest.json
 !fixtures/**/target/catalog.json
 fixtures/**/logs/
+.user.yml
