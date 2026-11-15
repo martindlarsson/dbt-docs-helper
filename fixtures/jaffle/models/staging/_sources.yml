@@ -1,0 +1,15 @@
+version: 2
+sources:
+  - name: crm
+    schema: main
+    tables:
+      - name: customers
+        identifier: raw_customers
+        columns:
+          - name: id
+            description: "{{ doc('col_crm_customers__id') }}"
+          - name: first_name
+            description: Customer first name
+          - name: last_name
+          - name: created_at
+            description: When the row was created in the CRM
